@@ -9,6 +9,6 @@ namespace Match3Core
         Heal        = 8,    //00001000
         Defence     = 16,   //00010000
         Money       = 32,   //00100000
-        All         = 63    //00111111
+        //All         = 63    //00111111
     }
 }

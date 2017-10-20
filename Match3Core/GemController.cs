@@ -245,7 +245,7 @@ namespace Match3Core
             {
                 return;
             }
-            if (neighbor.CurrentGemType.HasSameFlags(this.CurrentGemType))
+            if (!neighbor.CurrentGemType.HasSameFlags(this.CurrentGemType))
             {
                 return;
             }

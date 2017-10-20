@@ -1,19 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using System.Windows.Interop;
+using System.Collections.Generic;
 using System.ComponentModel;
+
+using Match3Core;
 
 namespace Match3CoreDemo
 {
@@ -37,6 +29,13 @@ namespace Match3CoreDemo
         private double mFps = 0;
         /// <summary>表示するフレームレート</summary>
         public double FPS { set { mFps = value; } get { return mFps; } }
+
+        private GemManager manager;
+
+        private int rowCount = 7;
+        private int columnCount = 7;
+
+        private List<GemControllerWrapper> gemControllers = new List<GemControllerWrapper>();
 
         public MainWindow()
         {
@@ -82,7 +81,23 @@ namespace Match3CoreDemo
                 mIsAvailable = false;
                 //if (_notifyIconManager != null) _notifyIconManager.Dispose();
             };
+
+
+            //---------------------------------------------MATCH3CORE---------------------------------------------
+            manager = new GemManager(rowCount, columnCount);
+            manager.OnGemCreated += OnGemCreated;
+            manager.Init();
+            //---------------------------------------------MATCH3CORE---------------------------------------------
         }
+
+        //---------------------------------------------MATCH3CORE---------------------------------------------
+        private void OnGemCreated(GemController gemController)
+        {
+            GemControllerWrapper wrapper = new GemControllerWrapper(gemController);
+            DrawCanvas.Children.Add(wrapper.GemImage);
+            gemControllers.Add(wrapper);
+        }
+        //---------------------------------------------MATCH3CORE---------------------------------------------
 
         /// <summary>更新処理</summary>
         public void Update(float deltaTime)
@@ -91,7 +106,14 @@ namespace Match3CoreDemo
 
             if (!mIsPaused)
             {
+                //---------------------------------------------MATCH3CORE---------------------------------------------
+                foreach (GemControllerWrapper gem in gemControllers)
+                {
+                    gem.Update();
+                }
                 //...更新 ...
+                manager.CheckMatchedMatches();
+                //---------------------------------------------MATCH3CORE---------------------------------------------
             }
         }
 
