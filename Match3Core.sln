@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.31101.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Match3Core", "Match3Core\Match3Core.csproj", "{14292E21-84FC-42DE-84C6-76A5D87F32AF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Match3CoreDemo", "Match3CoreDemo\Match3CoreDemo.csproj", "{38AE6788-A603-43DB-8983-52D29F0F7AF4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{14292E21-84FC-42DE-84C6-76A5D87F32AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14292E21-84FC-42DE-84C6-76A5D87F32AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14292E21-84FC-42DE-84C6-76A5D87F32AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14292E21-84FC-42DE-84C6-76A5D87F32AF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{38AE6788-A603-43DB-8983-52D29F0F7AF4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{38AE6788-A603-43DB-8983-52D29F0F7AF4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{38AE6788-A603-43DB-8983-52D29F0F7AF4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{38AE6788-A603-43DB-8983-52D29F0F7AF4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
