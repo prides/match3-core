@@ -55,7 +55,7 @@ namespace Match3Core
         {
             if (matchedMatches.Count > 0)
             {
-                List<int> needToCheckColums = new List<int>();
+                //List<int> needToCheckColums = new List<int>();
                 foreach (PossibleMatch pm in matchedMatches)
                 {
                     if (pm.IsOver)
@@ -65,52 +65,72 @@ namespace Match3Core
                     foreach (GemController gem in pm.MatchedGems)
                     {
                         gem.OnMatch();
-                        if (!needToCheckColums.Contains(gem.CurrentX))
-                        {
-                            needToCheckColums.Add(gem.CurrentX);
-                        }
+                        //if (!needToCheckColums.Contains(gem.CurrentX))
+                        //{
+                        //    needToCheckColums.Add(gem.CurrentX);
+                        //}
                     }
                     pm.Clear();
                 }
-                foreach (int x in needToCheckColums)
-                {
-                    int posToY = 0;
-                    int posFromY = 0;
-                    while (posFromY < rowCount)
-                    {
-                        while (posToY < rowCount && gems[x][posToY].CurrentState != GemController.State.Matched)
-                        {
-                            posToY++;
-                        }
-                        if (posToY >= rowCount)
-                        {
-                            break;
-                        }
-                        posFromY = posToY + 1;
-                        while (posFromY < rowCount && gems[x][posFromY].CurrentState == GemController.State.Matched)
-                        {
-                            posFromY++;
-                        }
-                        if (posFromY >= rowCount)
-                        {
-                            break;
-                        }
-
-                        gems[x][posFromY].SetPosition(x, posToY, true);
-                        SwitchGems(x, posToY, x, posFromY);
-                    }
-                    posFromY = 0;
-                    while (posFromY < rowCount && gems[x][posFromY].CurrentState != GemController.State.Matched)
-                    {
-                        posFromY++;
-                    }
-                    while (posFromY < rowCount)
-                    {
-                        gems[x][posFromY] = CreateGem(x, posFromY, false);
-                        posFromY++;
-                    }
-                }
                 matchedMatches.Clear();
+            }
+            if (dissapearedGems.Count > 0)
+            {
+                RefillColums();
+            }
+        }
+
+        private void RefillColums()
+        {
+            List<int> needToCheckColums = new List<int>();
+            foreach (GemController gem in dissapearedGems)
+            {
+                if (!needToCheckColums.Contains(gem.CurrentX))
+                {
+                    needToCheckColums.Add(gem.CurrentX);
+                }
+            }
+            dissapearedGems.Clear();
+            foreach (int x in needToCheckColums)
+            {
+                int posToY = 0;
+                int posFromY = 0;
+                while (posFromY < rowCount)
+                {
+                    while (posToY < rowCount && gems[x][posToY].CurrentState != GemController.State.Matched)
+                    {
+                        posToY++;
+                    }
+                    if (posToY >= rowCount)
+                    {
+                        break;
+                    }
+                    posFromY = posToY + 1;
+                    while (posFromY < rowCount && gems[x][posFromY].CurrentState == GemController.State.Matched)
+                    {
+                        posFromY++;
+                    }
+                    if (posFromY >= rowCount)
+                    {
+                        break;
+                    }
+
+                    gems[x][posFromY].SetPosition(x, posToY, true);
+                    SwitchGems(x, posToY, x, posFromY);
+                }
+                posFromY = 0;
+                while (posFromY < rowCount && gems[x][posFromY].CurrentState != GemController.State.Matched)
+                {
+                    posFromY++;
+                }
+                int posYdiff = rowCount - posFromY;
+                while (posFromY < rowCount)
+                {
+                    gems[x][posFromY] = CreateGem(x, posFromY, false);
+                    gems[x][posFromY].SetPosition(x, posFromY + posYdiff, false);
+                    gems[x][posFromY].SetPosition(x, posFromY, true);
+                    posFromY++;
+                }
             }
         }
 
@@ -206,8 +226,15 @@ namespace Match3Core
             gem.OnReadyEvent += OnGemReady;
             gem.OnPossibleMatchAddedEvent += OnPossibleMatchAdded;
             gem.OnMovingToEvent += OnGemMove;
-            gem.Init();
+            gem.OnDissapear += OnGemDissapear;
+            gem.Init(beggining);
             return gem;
+        }
+
+        private List<GemController> dissapearedGems = new List<GemController>();
+        private void OnGemDissapear(GemController gem)
+        {
+            dissapearedGems.Add(gem);
         }
 
         public void OnGemMove(GemController gem, Direction direction)

@@ -77,7 +77,7 @@ namespace Match3CoreDemo
             }
         }
 
-        private void OnAppear(GemController sender)
+        private void OnAppear(GemController sender, bool animated)
         {
             Task.Delay(500).ContinueWith(_ =>
             {

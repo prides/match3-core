@@ -22,8 +22,11 @@ namespace Match3Core
         public delegate void EventWithPosition(GemController sender, int x, int y, bool interpolate);
         public event EventWithPosition OnPositionChanged;
 
-        public event SimpleGemEventDelegate OnAppear;
+        public delegate void EventWithBoolean(GemController sender, bool value);
+        public event EventWithBoolean OnAppear;
+
         public event SimpleGemEventDelegate OnFadeout;
+        public event SimpleGemEventDelegate OnDissapear;
         #endregion
 
         #region properties
@@ -135,12 +138,12 @@ namespace Match3Core
             get { return currentState; }
         }
 
-        public void Init()
+        public void Init(bool animated)
         {
             isActive = true;
             if (null != OnAppear)
             {
-                OnAppear(this);
+                OnAppear(this, animated);
             }
         }
 
@@ -325,7 +328,10 @@ namespace Match3Core
 
         public void OnFadeoutOver()
         {
-
+            if (null != OnDissapear)
+            {
+                OnDissapear(this);
+            }
         }
     }
 }
