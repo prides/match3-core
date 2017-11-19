@@ -21,7 +21,7 @@ namespace Match3Core
             }
         }
 
-        public void Message(string message)
+        internal void Message(string message)
         {
             if (null != OnDebugMessage)
             {
@@ -29,7 +29,7 @@ namespace Match3Core
             }
         }
 
-        public void Warning(string message)
+        internal void Warning(string message)
         {
             if (null != OnWarningMessage)
             {
@@ -37,7 +37,7 @@ namespace Match3Core
             }
         }
 
-        public void Error(string message)
+        internal void Error(string message)
         {
             if (null != OnErrorMessage)
             {

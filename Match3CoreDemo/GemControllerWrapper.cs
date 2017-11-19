@@ -13,6 +13,7 @@ namespace Match3CoreDemo
     class GemControllerWrapper
     {
         private static Dictionary<GemType, BitmapImage> GemImages;
+        private static Dictionary<GemSpecialType, BitmapImage> SpecialTypeImages;
 
         private GemController instance;
 
@@ -22,6 +23,12 @@ namespace Match3CoreDemo
             get { return image; }
         }
 
+        private Image specialImage;
+        public Image SpecialImage
+        {
+            get { return specialImage; }
+        }
+
         public GemControllerWrapper(GemController gemController)
         {
             if (null == GemImages)
@@ -29,19 +36,32 @@ namespace Match3CoreDemo
                 PrepareGemImages();
             }
 
+            if (null == SpecialTypeImages)
+            {
+                PrepareSpecialTypeImages();
+            }
+
             instance = gemController;
             instance.OnAppear += OnAppear;
             instance.OnFadeout += OnFadeout;
             instance.OnTypeChanged += OnTypeChanged;
             instance.OnPositionChanged += OnPositionChanged;
+            instance.OnSpecialTypeChanged += OnSpecialTypeChanged;
 
             image = new Image();
-            image.Width = 64;
-            image.Height = 64;
+            image.Width = 32;
+            image.Height = 32;
             image.Stretch = Stretch.Fill;
             image.Source = GemImages[GemType.None];
-            image.MouseLeftButtonDown += Image_MouseLeftButtonDown;
-            image.MouseLeftButtonUp += Image_MouseLeftButtonUp;
+            image.Tag = this;
+
+            specialImage = new Image();
+            specialImage.Width = 32;
+            specialImage.Height = 32;
+            specialImage.Stretch = Stretch.Fill;
+            specialImage.Source = SpecialTypeImages[GemSpecialType.Regular];
+            specialImage.Tag = this;
+            specialImage.IsHitTestVisible = false;
         }
 
         public void Update()
@@ -50,20 +70,22 @@ namespace Match3CoreDemo
             {
                 return;
             }
-            if (instance.NeighborChangedFlag != Direction.None)
-            {
-                instance.OnNeighborChanged();
-            }
+            instance.CheckNeighbor();
         }
 
-        private void Image_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        public void OnMovingStart()
         {
             instance.OnMovingStart();
         }
 
-        private void Image_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        public void MoveTo(Direction direction)
         {
-            instance.MoveTo(Direction.Up);
+            instance.MoveTo(direction);
+        }
+
+        public Direction GetConstrains()
+        {
+            return instance.Constrains;
         }
 
         private void PrepareGemImages()
@@ -74,6 +96,17 @@ namespace Match3CoreDemo
             {
                 BitmapImage bi = new BitmapImage(new Uri("pack://siteoforigin:,,,/Resources/" + gemtype.ToString() + ".png"));
                 GemImages.Add(gemtype, bi);
+            }
+        }
+
+        private void PrepareSpecialTypeImages()
+        {
+            SpecialTypeImages = new Dictionary<GemSpecialType, BitmapImage>();
+            GemSpecialType[] gemSpecialTypes = Enum.GetValues(typeof(GemSpecialType)).Cast<GemSpecialType>().ToArray();
+            foreach (GemSpecialType gemspecialtype in gemSpecialTypes)
+            {
+                BitmapImage bi = new BitmapImage(new Uri("pack://siteoforigin:,,,/Resources/" + gemspecialtype.ToString() + ".png"));
+                SpecialTypeImages.Add(gemspecialtype, bi);
             }
         }
 
@@ -88,6 +121,7 @@ namespace Match3CoreDemo
         private void OnFadeout(GemController sender)
         {
             image.Opacity = 0.0;
+            specialImage.Opacity = 0.0;
             Task.Delay(500).ContinueWith(_ =>
             {
                 instance.OnFadeoutOver();
@@ -101,16 +135,26 @@ namespace Match3CoreDemo
 
         private void OnPositionChanged(GemController sender, int x, int y, bool interpolate)
         {
-            Canvas.SetLeft(image, 50 + x * 64);
-            Canvas.SetTop(image, 50 + (64 * 6 - y * 64));
+            Canvas.SetLeft(image, 50 + x * 32);
+            Canvas.SetTop(image, 50 + (32 * 6 - y * 32));
+            Canvas.SetLeft(specialImage, 50 + x * 32);
+            Canvas.SetTop(specialImage, 50 + (32 * 6 - y * 32));
             if (interpolate)
             {
-                instance.OnMovingStart();
-                Task.Delay(500).ContinueWith(_ =>
+                Task.Delay(500).ContinueWith(__ =>
                 {
                     instance.OnMovingEnd();
                 });
             }
+            //else
+            //{
+            //    instance.OnMovingEnd();
+            //}
+        }
+
+        private void OnSpecialTypeChanged(GemController sender, GemSpecialType specialType)
+        {
+            specialImage.Source = SpecialTypeImages[specialType];
         }
     }
 }

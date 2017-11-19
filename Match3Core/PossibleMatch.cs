@@ -4,6 +4,9 @@ namespace Match3Core
 {
     public class PossibleMatch
     {
+        private static int ID = 0;
+
+        private int id = 0;
         public enum Line
         {
             None = 0,
@@ -18,6 +21,13 @@ namespace Match3Core
         public delegate void SimplePossibleMatchDelegate(PossibleMatch sender);
         public event SimplePossibleMatchDelegate OnOver;
 
+        private GemController matchInitiator;
+        public GemController MatchInitiator
+        {
+            get { return matchInitiator; }
+            set { matchInitiator = value; }
+        }
+
         private GemType matchType = 0;
         public GemType MatchType
         {
@@ -28,6 +38,11 @@ namespace Match3Core
         public Line MatchDirection
         {
             get { return matchDirection; }
+            private set
+            {
+                matchDirection = value;
+                Logger.Instance.Message(ToString() + " direction was changed to " + value);
+            }
         }
 
         private List<GemController> matchedGems = new List<GemController>();
@@ -44,6 +59,8 @@ namespace Match3Core
 
         public PossibleMatch(GemType type)
         {
+            id = ID++;
+            Logger.Instance.Message(ToString() + " was created with type " + type);
             matchType = type;
         }
 
@@ -51,11 +68,11 @@ namespace Match3Core
         {
             if (gem.CurrentGemType.HasSameFlags(matchType))
             {
-                if (matchDirection == Line.Horizontal && gem.CurrentX != matchedGems[0].CurrentX)
+                if (MatchDirection == Line.Horizontal && gem.CurrentX != matchedGems[0].CurrentX)
                 {
                     return false;
                 }
-                if (matchDirection == Line.Vertical && gem.CurrentY != matchedGems[0].CurrentY)
+                if (MatchDirection == Line.Vertical && gem.CurrentY != matchedGems[0].CurrentY)
                 {
                     return false;
                 }
@@ -67,13 +84,14 @@ namespace Match3Core
                 {
                     if (matchedGems[0].CurrentX == gem.CurrentX)
                     {
-                        matchDirection = Line.Horizontal;
+                        MatchDirection = Line.Horizontal;
                     }
                     else if (matchedGems[0].CurrentY == gem.CurrentY)
                     {
-                        matchDirection = Line.Vertical;
+                        MatchDirection = Line.Vertical;
                     }
                 }
+                Logger.Instance.Message(ToString() + ": " + gem.ToString() + " was added");
                 matchedGems.Add(gem);
                 gem.PossibleMatches.Add(this);
                 return true;
@@ -83,6 +101,11 @@ namespace Match3Core
 
         public void RemoveGem(GemController gem)
         {
+            Logger.Instance.Message(ToString() + ": " + gem.ToString() + " was removed");
+            if (MatchInitiator == gem)
+            {
+                MatchInitiator = null;
+            }
             matchedGems.Remove(gem);
             gem.PossibleMatches.Remove(this);
             if (matchedGems.Count == 1)
@@ -93,7 +116,8 @@ namespace Match3Core
 
         public void Merge(PossibleMatch other)
         {
-            this.matchDirection |= other.matchDirection;
+            Logger.Instance.Message(ToString() + " was merged with " + other.ToString());
+            this.MatchDirection |= other.MatchDirection;
             foreach (GemController gem in other.matchedGems)
             {
                 AddGem(gem);
@@ -103,8 +127,10 @@ namespace Match3Core
 
         public void Clear()
         {
+            Logger.Instance.Message(ToString() + " was cleared");
+            MatchInitiator = null;
             isOver = true;
-            matchDirection = Line.None;
+            MatchDirection = Line.None;
             foreach (GemController gem in matchedGems)
             {
                 gem.PossibleMatches.Remove(this);
@@ -125,6 +151,7 @@ namespace Match3Core
         {
             if (matchedGems.Count >= 3)
             {
+                Logger.Instance.Message(ToString() + " matched");
                 if (null != OnMatch)
                 {
                     OnMatch(this, matchedGems.ToArray());
@@ -132,6 +159,11 @@ namespace Match3Core
                 return true;
             }
             return false;
+        }
+
+        public override string ToString()
+        {
+            return "PossibleMatch[" + id + "," + matchDirection + "]";
         }
     }
 }

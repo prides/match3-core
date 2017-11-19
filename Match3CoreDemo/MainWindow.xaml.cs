@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Controls;
 using System.Collections.Generic;
 using System.ComponentModel;
 
@@ -82,8 +83,11 @@ namespace Match3CoreDemo
                 //if (_notifyIconManager != null) _notifyIconManager.Dispose();
             };
 
-
             //---------------------------------------------MATCH3CORE---------------------------------------------
+            Logger.Instance.OnDebugMessage += OnDebugMessage;
+            Logger.Instance.OnWarningMessage += OnWarningMessage;
+            Logger.Instance.OnErrorMessage += OnErrorMessage;
+
             manager = new GemManager(rowCount, columnCount);
             manager.OnGemCreated += OnGemCreated;
             manager.Init();
@@ -91,10 +95,36 @@ namespace Match3CoreDemo
         }
 
         //---------------------------------------------MATCH3CORE---------------------------------------------
+        private static readonly log4net.ILog _logger = log4net.LogManager.GetLogger(typeof(MainWindow));
+
+        private void OnDebugMessage(string message)
+        {
+#if DEBUG
+            //Console.WriteLine("[Debug]: " + message);
+            _logger.Info("[Debug]: " + message);
+#endif
+        }
+
+        private void OnWarningMessage(string message)
+        {
+            //Console.WriteLine("[Warning]: " + message);
+            _logger.Warn("[Warning]: " + message);
+        }
+
+        private void OnErrorMessage(string message)
+        {
+            //Console.WriteLine("[Error]: " + message);
+            _logger.Error("[Error]: " + message);
+        }
+        //---------------------------------------------MATCH3CORE---------------------------------------------
+
+        //---------------------------------------------MATCH3CORE---------------------------------------------
         private void OnGemCreated(GemController gemController)
         {
             GemControllerWrapper wrapper = new GemControllerWrapper(gemController);
             DrawCanvas.Children.Add(wrapper.GemImage);
+            DrawCanvas.Children.Add(wrapper.SpecialImage);
+            wrapper.GemImage.MouseDown += Image_MouseDown;
             gemControllers.Add(wrapper);
         }
         //---------------------------------------------MATCH3CORE---------------------------------------------
@@ -180,6 +210,57 @@ namespace Match3CoreDemo
         {
             if (this.PropertyChanged != null)
                 this.PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private GemControllerWrapper selectedGem = null;
+        private Point mouseDownPosition;
+        private void Image_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Image)
+            {
+                Image img_sender = sender as Image;
+                if (img_sender.Tag != null && img_sender.Tag is GemControllerWrapper)
+                {
+                    selectedGem = img_sender.Tag as GemControllerWrapper;
+                    mouseDownPosition = e.GetPosition(this);
+                }
+            }
+        }
+
+        private void Window_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (selectedGem != null)
+            {
+                Point mousePos = e.GetPosition(this);
+                Direction direction = CalculateDirection(mousePos, mouseDownPosition);
+                if (!selectedGem.GetConstrains().HasFlag(direction))
+                {
+                    selectedGem.MoveTo(direction);
+                }
+                selectedGem = null;
+            }
+        }
+
+        private Direction CalculateDirection(Point a, Point b)
+        {
+//#if DEBUG
+//            Console.WriteLine("a: " + a.ToString() + ", b: " + b.ToString());
+//#endif
+            Direction result;
+            double mouseDiffX = a.X - b.X;
+            double mouseDiffY = a.Y - b.Y;
+            if (Math.Abs(mouseDiffX) > Math.Abs(mouseDiffY))
+            {
+                result = mouseDiffX > 0 ? Direction.Right : Direction.Left;
+            }
+            else
+            {
+                result = mouseDiffY > 0 ? Direction.Down : Direction.Up;
+            }
+//#if DEBUG
+//            Console.WriteLine("Direction: " + result);
+//#endif
+            return result;
         }
     }
 }

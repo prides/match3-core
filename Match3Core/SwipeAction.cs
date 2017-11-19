@@ -26,13 +26,14 @@ namespace Match3Core
 
         public SwipeAction(GemController gem1, GemController gem2)
         {
+            Logger.Instance.Message("SwipeAction was created with " + gem1.ToString() + " and " + gem2.ToString());
             swipingGems.Add(new SwipeInfo(gem1, false, false));
             swipingGems.Add(new SwipeInfo(gem2, false, false));
         }
 
         public void SetGemSwipeResult(GemController gem, bool isMatched)
         {
-            Logger.Instance.Message("gem(" + gem.CurrentX + "," + gem.CurrentY + ") is " + (isMatched ? "matched" : "not matched"));
+            Logger.Instance.Message(gem.ToString() + " is " + (isMatched ? "matched" : "not matched"));
             for (int i = 0; i < swipingGems.Count; i++)
             {
                 if (swipingGems[i].gem == gem)

@@ -37,7 +37,7 @@ namespace Match3Core
 
         public static GemType Random(this GemType self)
         {
-            GemType[] matching = Enum.GetValues(typeof(GemType)).Cast<GemType>().Where(v => self.HasFlag(v) && v != GemType.None).ToArray();
+            GemType[] matching = Enum.GetValues(typeof(GemType)).Cast<GemType>().Where(v => self.HasFlag(v) && v != GemType.None && v != GemType.HitType).ToArray();
             if (matching.Length == 0)
             {
                 return GemType.None;

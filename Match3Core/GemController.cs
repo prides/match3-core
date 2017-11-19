@@ -6,15 +6,18 @@ namespace Match3Core
 {
     public class GemController
     {
+        private static int ID = 0;
+        private int id = 0;
+
         #region events
         public delegate void SimpleGemEventDelegate(GemController sender);
-        public event SimpleGemEventDelegate OnReadyEvent;
+        internal event SimpleGemEventDelegate OnReadyEvent;
 
         public delegate void PossibleMatchDelegate(GemController sender, PossibleMatch possibleMatch);
-        public event PossibleMatchDelegate OnPossibleMatchAddedEvent;
+        internal event PossibleMatchDelegate OnPossibleMatchAddedEvent;
 
         public delegate void EventWithDirectionDelegate(GemController sender, Direction direction);
-        public event EventWithDirectionDelegate OnMovingToEvent;
+        internal event EventWithDirectionDelegate OnMovingToEvent;
 
         public delegate void EventWithTypeDelegate(GemController sender, GemType type);
         public event EventWithTypeDelegate OnTypeChanged;
@@ -25,16 +28,52 @@ namespace Match3Core
         public delegate void EventWithBoolean(GemController sender, bool value);
         public event EventWithBoolean OnAppear;
 
+        public delegate void EventWithSpecialType(GemController sender, GemSpecialType type);
+        public event EventWithSpecialType OnSpecialMatch;
+        public event EventWithSpecialType OnSpecialTypeChanged;
+
         public event SimpleGemEventDelegate OnFadeout;
         public event SimpleGemEventDelegate OnDissapear;
         #endregion
 
         #region properties
+        public enum State
+        {
+            Idle,
+            Moving,
+            Matched
+        }
+
+        private State currentState;
+        public State CurrentState
+        {
+            get { return currentState; }
+            private set
+            {
+                Logger.Instance.Message(this.ToString() + " current state was changed to " + value);
+                currentState = value;
+            }
+        }
+
         private GemType currentGemType = 0;
         public GemType CurrentGemType
         {
             get { return currentGemType; }
             private set { currentGemType = value; }
+        }
+
+        private GemSpecialType specialType;
+        public GemSpecialType SpecialType
+        {
+            get { return specialType; }
+            set
+            {
+                specialType = value;
+                if (null != OnSpecialTypeChanged)
+                {
+                    OnSpecialTypeChanged(this, specialType);
+                }
+            }
         }
 
         private int currentX = 0;
@@ -55,17 +94,39 @@ namespace Match3Core
         public bool IsActive
         {
             get { return isActive; }
+            private set
+            {
+                isActive = value;
+                Logger.Instance.Message(this.ToString() + " isActive set to " + value);
+            }
         }
 
         private List<PossibleMatch> possibleMatches = new List<PossibleMatch>();
-        public List<PossibleMatch> PossibleMatches
+        internal List<PossibleMatch> PossibleMatches
         {
             get { return possibleMatches; }
+        }
+
+        private SwipeAction currentSwipeAction = null;
+        internal SwipeAction CurrentSwipeAction
+        {
+            get { return currentSwipeAction; }
+            set { currentSwipeAction = value; }
+        }
+
+        public Direction Constrains
+        {
+            get
+            {
+                return (LeftNeighbor == null ? Direction.Left : Direction.None)
+                    | (RightNeighbor == null ? Direction.Right : Direction.None)
+                    | (UpNeighbor == null ? Direction.Up : Direction.None)
+                    | (DownNeighbor == null ? Direction.Down : Direction.None);
+            }
         }
         #endregion
 
         #region neighbor
-
         private GemController leftNeighbor = null;
         private GemController rightNeighbor = null;
         private GemController upNeighbor = null;
@@ -116,39 +177,26 @@ namespace Match3Core
                 neighborChangedFlag |= Direction.Down;
             }
         }
-
-        private SwipeAction currentSwipeAction = null;
-        public SwipeAction CurrentSwipeAction
-        {
-            get { return currentSwipeAction; }
-            set { currentSwipeAction = value; }
-        }
         #endregion
 
-        public enum State
+        internal GemController()
         {
-            Idle,
-            Moving,
-            Matched
+            id = ID++;
         }
 
-        private State currentState;
-        public State CurrentState
+        internal void Init(bool animated)
         {
-            get { return currentState; }
-        }
-
-        public void Init(bool animated)
-        {
-            isActive = true;
+            Logger.Instance.Message(this.ToString() + " was initialized");
+            IsActive = true;
             if (null != OnAppear)
             {
                 OnAppear(this, animated);
             }
         }
 
-        public void SetGemType(GemType type)
+        internal void SetGemType(GemType type)
         {
+            Logger.Instance.Message(this.ToString() + " type was set to " + type);
             currentGemType = type;
             if (null != OnTypeChanged)
             {
@@ -156,10 +204,15 @@ namespace Match3Core
             }
         }
 
-        public void SetPosition(int x, int y, bool interpolate = false)
+        internal void SetPosition(int x, int y, bool interpolate = false)
         {
+            Logger.Instance.Message(this.ToString() + " position was set to " + x + "," + y);
             CurrentX = x;
             CurrentY = y;
+            if (interpolate)
+            {
+                OnMovingStart();
+            }
             if (null != OnPositionChanged)
             {
                 OnPositionChanged(this, x, y, interpolate);
@@ -183,7 +236,15 @@ namespace Match3Core
             }
         }
 
-        public void OnNeighborChanged()
+        public void CheckNeighbor()
+        {
+            if (NeighborChangedFlag != Direction.None)
+            {
+                OnNeighborChanged();
+            }
+        }
+
+        private void OnNeighborChanged()
         {
             if ((neighborChangedFlag & Direction.Left) == Direction.Left)
             {
@@ -230,11 +291,15 @@ namespace Match3Core
             {
                 if (possibleMatches[i].CheckMatch())
                 {
+                    if (currentSwipeAction != null)
+                    {
+                        possibleMatches[i].MatchInitiator = this;
+                    }
                     isMatched = true;
                 }
             }
 
-            if (currentState == State.Idle && null != currentSwipeAction)
+            if (CurrentState == State.Idle && null != currentSwipeAction)
             {
                 currentSwipeAction.SetGemSwipeResult(this, isMatched);
             }
@@ -264,6 +329,7 @@ namespace Match3Core
             {
                 PossibleMatch possibleMatch = new PossibleMatch(this.CurrentGemType.GetSameFlags(neighbor.CurrentGemType));
                 possibleMatch.AddGem(this);
+                Logger.Instance.Message(this.ToString() + " adding neighbor " + neighbor.ToString() + " to " + possibleMatch.ToString());
                 possibleMatch.AddGem(neighbor);
                 if (null != OnPossibleMatchAddedEvent)
                 {
@@ -274,7 +340,7 @@ namespace Match3Core
 
         private void Clear()
         {
-            isActive = false;
+            IsActive = false;
             for (int i = possibleMatches.Count - 1; i >= 0; i--)
             {
                 possibleMatches[i].RemoveGem(this);
@@ -283,6 +349,7 @@ namespace Match3Core
 
         public void MoveTo(Direction direction)
         {
+            Logger.Instance.Message(this.ToString() + " moving to " + direction);
             if (null != OnMovingToEvent)
             {
                 OnMovingToEvent(this, direction);
@@ -291,35 +358,47 @@ namespace Match3Core
 
         public void OnMovingStart()
         {
+            Logger.Instance.Message(this.ToString() + " moving start");
             Clear();
-            currentState = State.Moving;
+            CurrentState = State.Moving;
         }
 
         public void OnMovingEnd()
         {
-            isActive = true;
-            currentState = State.Idle;
+            Logger.Instance.Message(this.ToString() + " moving finished");
+            IsActive = true;
+            CurrentState = State.Idle;
             if (null != OnReadyEvent)
             {
                 OnReadyEvent(this);
             }
         }
 
-        public void OnMatch()
+        internal void OnMatch()
         {
-            //Clear();
-            currentState = State.Matched;
-            isActive = false;
+            if (CurrentState == State.Matched)
+            {
+                return;
+            }
+            Logger.Instance.Message(this.ToString() + " matched");
+            Clear();
+            CurrentState = State.Matched;
+            IsActive = false;
             possibleMatches.Clear();
             if (null != OnFadeout)
             {
                 OnFadeout(this);
             }
+            if (null != OnSpecialMatch)
+            {
+                OnSpecialMatch(this, SpecialType);
+            }
         }
 
         public void OnAppearOver()
         {
-            isActive = true;
+            Logger.Instance.Message(this.ToString() + " OnAppearOver");
+            IsActive = true;
             if (null != OnReadyEvent)
             {
                 OnReadyEvent(this);
@@ -328,10 +407,16 @@ namespace Match3Core
 
         public void OnFadeoutOver()
         {
+            Logger.Instance.Message(this.ToString() + " OnFadeoutOver");
             if (null != OnDissapear)
             {
                 OnDissapear(this);
             }
+        }
+
+        public override string ToString()
+        {
+            return "Gem[" + id + "," + CurrentX + "," + CurrentY + "," + CurrentGemType + "," + SpecialType + "," + CurrentState + "]";
         }
     }
 }
