@@ -4,16 +4,11 @@ namespace Match3Core
 {
     public class PossibleMatch
     {
+        public const int MATCH_COUNT = 3;
+
         private static int ID = 0;
 
         private int id = 0;
-        public enum Line
-        {
-            None = 0,
-            Horizontal = 1,
-            Vertical = 2,
-            Cross = 3
-        }
 
         public delegate void GemsMatchedEventDelegate(PossibleMatch sender, GemController[] matchedGems);
         public event GemsMatchedEventDelegate OnMatch;
@@ -51,14 +46,29 @@ namespace Match3Core
             get { return matchedGems; }
         }
 
+        private bool isMatched = false;
+        public bool IsMatched
+        {
+            get { return isMatched; }
+            private set { isMatched = value; }
+        }
+
         private bool isOver = false;
         public bool IsOver
         {
             get { return isOver; }
         }
 
-        public PossibleMatch(GemType type)
+        private bool isContainer = false;
+        public bool IsContainer
         {
+            get { return isContainer; }
+            private set { isContainer = value; }
+        }
+
+        public PossibleMatch(GemType type, bool isContainer = false)
+        {
+            this.isContainer = isContainer;
             id = ID++;
             Logger.Instance.Message(ToString() + " was created with type " + type);
             matchType = type;
@@ -66,37 +76,28 @@ namespace Match3Core
 
         public bool AddGem(GemController gem)
         {
-            if (gem.CurrentGemType.HasSameFlags(matchType))
+            if (!IsPossibleToAdd(gem))
             {
-                if (MatchDirection == Line.Horizontal && gem.CurrentX != matchedGems[0].CurrentX)
-                {
-                    return false;
-                }
-                if (MatchDirection == Line.Vertical && gem.CurrentY != matchedGems[0].CurrentY)
-                {
-                    return false;
-                }
-                if (matchedGems.Contains(gem))
-                {
-                    return false;
-                }
-                if (matchedGems.Count == 1)
-                {
-                    if (matchedGems[0].CurrentX == gem.CurrentX)
-                    {
-                        MatchDirection = Line.Horizontal;
-                    }
-                    else if (matchedGems[0].CurrentY == gem.CurrentY)
-                    {
-                        MatchDirection = Line.Vertical;
-                    }
-                }
-                Logger.Instance.Message(ToString() + ": " + gem.ToString() + " was added");
-                matchedGems.Add(gem);
-                gem.PossibleMatches.Add(this);
-                return true;
+                return false;
             }
-            return false;
+            if (matchedGems.Count == 1 && !isContainer)
+            {
+                if (matchedGems[0].Position.x == gem.Position.x)
+                {
+                    MatchDirection = Line.Vertical;
+                }
+                else if (matchedGems[0].Position.y == gem.Position.y)
+                {
+                    MatchDirection = Line.Horizontal;
+                }
+            }
+            Logger.Instance.Message(ToString() + ": " + gem.ToString() + " was added");
+            matchedGems.Add(gem);
+            if (!IsContainer)
+            {
+                gem.PossibleMatches.Add(this);
+            }
+            return true;
         }
 
         public void RemoveGem(GemController gem)
@@ -107,10 +108,13 @@ namespace Match3Core
                 MatchInitiator = null;
             }
             matchedGems.Remove(gem);
-            gem.PossibleMatches.Remove(this);
+            if (!IsContainer)
+            {
+                gem.PossibleMatches.Remove(this);
+            }
             if (matchedGems.Count == 1)
             {
-                Clear();
+                Over();
             }
         }
 
@@ -122,18 +126,21 @@ namespace Match3Core
             {
                 AddGem(gem);
             }
-            other.Clear();
+            other.Over();
         }
 
-        public void Clear()
+        public void Over()
         {
             Logger.Instance.Message(ToString() + " was cleared");
             MatchInitiator = null;
             isOver = true;
             MatchDirection = Line.None;
-            foreach (GemController gem in matchedGems)
+            if (!IsContainer)
             {
-                gem.PossibleMatches.Remove(this);
+                foreach (GemController gem in matchedGems)
+                {
+                    gem.PossibleMatches.Remove(this);
+                }
             }
             matchedGems.Clear();
             if (null != OnOver)
@@ -142,23 +149,67 @@ namespace Match3Core
             }
         }
 
-        public bool IsMatched()
+        public bool IsMatch()
         {
-            return matchedGems.Count >= 3;
+            return matchedGems.Count >= MATCH_COUNT;
         }
 
-        public bool CheckMatch()
+        public bool IsMatch(GemController additionalGem)
         {
-            if (matchedGems.Count >= 3)
+            if (IsPossibleToAdd(additionalGem))
             {
-                Logger.Instance.Message(ToString() + " matched");
-                if (null != OnMatch)
+                return matchedGems.Count >= MATCH_COUNT - 1;
+            }
+            else
+            {
+                return IsMatch();
+            }
+        }
+
+        public bool IsPossibleToAdd(GemController addableGem)
+        {
+            if (addableGem.CurrentGemType.HasSameFlags(matchType))
+            {
+                if (matchedGems.Count == 0)
                 {
-                    OnMatch(this, matchedGems.ToArray());
+                    return true;
+                }
+                else if (MatchDirection == Line.Horizontal && addableGem.Position.y != matchedGems[0].Position.y
+                    || MatchDirection == Line.Vertical && addableGem.Position.x != matchedGems[0].Position.x
+                    || matchedGems.Contains(addableGem))
+                {
+                    return false;
                 }
                 return true;
             }
-            return false;
+            else
+            {
+                return false;
+            }
+        }
+
+        public bool Match()
+        {
+            if (!IsMatch())
+            {
+                return false;
+            }
+            if (IsMatched)
+            {
+                return true;
+            }
+            IsMatched = true;
+            Logger.Instance.Message(ToString() + " matched");
+            if (null != OnMatch)
+            {
+                OnMatch(this, matchedGems.ToArray());
+            }
+            return true;
+        }
+
+        private void CheckForPossibleMove()
+        {
+
         }
 
         public override string ToString()

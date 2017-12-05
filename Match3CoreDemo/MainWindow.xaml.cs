@@ -90,6 +90,7 @@ namespace Match3CoreDemo
 
             manager = new GemManager(rowCount, columnCount);
             manager.OnGemCreated += OnGemCreated;
+            manager.OnPossibleMoveCreate += OnPossibleMoveCreate;
             manager.Init();
             //---------------------------------------------MATCH3CORE---------------------------------------------
         }
@@ -116,17 +117,41 @@ namespace Match3CoreDemo
             //Console.WriteLine("[Error]: " + message);
             _logger.Error("[Error]: " + message);
         }
-        //---------------------------------------------MATCH3CORE---------------------------------------------
 
-        //---------------------------------------------MATCH3CORE---------------------------------------------
         private void OnGemCreated(GemController gemController)
         {
             GemControllerWrapper wrapper = new GemControllerWrapper(gemController);
             DrawCanvas.Children.Add(wrapper.GemImage);
             DrawCanvas.Children.Add(wrapper.SpecialImage);
             wrapper.GemImage.MouseDown += Image_MouseDown;
+            wrapper.OnOverEvent += OnGemWrapperOver;
             gemControllers.Add(wrapper);
         }
+
+        private void OnPossibleMoveCreate(PossibleMove possibleMove)
+        {
+            PossibleMoveWrapper pmw = new PossibleMoveWrapper(possibleMove);
+            DrawCanvas.Children.Add(pmw.WinShape);
+            pmw.OnOverEvent += Pmw_OnOverEvent;
+        }
+
+        private void Pmw_OnOverEvent(PossibleMoveWrapper sender)
+        {
+            DrawCanvas.Children.Remove(sender.WinShape);
+        }
+
+        private void OnGemWrapperOver(GemControllerWrapper sender)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                DrawCanvas.Children.Remove(sender.GemImage);
+                DrawCanvas.Children.Remove(sender.SpecialImage);
+                sender.GemImage.MouseDown -= Image_MouseDown;
+                sender.OnOverEvent -= OnGemWrapperOver;
+                gemControllers.Remove(sender);
+            });
+        }
+
         //---------------------------------------------MATCH3CORE---------------------------------------------
 
         /// <summary>更新処理</summary>
@@ -173,6 +198,9 @@ namespace Match3CoreDemo
 
                 case Key.Escape:
                     this.Close(); break;
+
+                case Key.S:
+                    manager.ShuffleGems(); break;
             }
         }
 

@@ -10,6 +10,6 @@ namespace Match3Core
         Defence     = 16,   //0010000
         Money       = 32,   //0100000
         HitType     = 64,   //1000000
-        //All         = 127    //1111111
+        All         = 127   //1111111
     }
 }

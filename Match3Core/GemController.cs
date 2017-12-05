@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Match3Core
 {
@@ -29,8 +30,11 @@ namespace Match3Core
         public event EventWithBoolean OnAppear;
 
         public delegate void EventWithSpecialType(GemController sender, GemSpecialType type);
-        public event EventWithSpecialType OnSpecialMatch;
+        internal event EventWithSpecialType OnSpecialMatch;
         public event EventWithSpecialType OnSpecialTypeChanged;
+
+        internal delegate void PossibleMoveDelegate(GemController sender, GemController[] participants, GemController key, Line direction);
+        internal event PossibleMoveDelegate OnPossibleMoveFound;
 
         public event SimpleGemEventDelegate OnFadeout;
         public event SimpleGemEventDelegate OnDissapear;
@@ -76,18 +80,11 @@ namespace Match3Core
             }
         }
 
-        private int currentX = 0;
-        public int CurrentX
+        private Position position = new Position();
+        public Position Position
         {
-            get { return currentX; }
-            private set { currentX = value; }
-        }
-
-        private int currentY = 0;
-        public int CurrentY
-        {
-            get { return currentY; }
-            private set { currentY = value; }
+            get { return position; }
+            private set { position = value; }
         }
 
         private bool isActive = false;
@@ -133,6 +130,8 @@ namespace Match3Core
         private GemController downNeighbor = null;
 
         private Direction neighborChangedFlag = Direction.None;
+        private bool needToCheckNeighbor = false;
+
         public Direction NeighborChangedFlag
         {
             get { return neighborChangedFlag; }
@@ -179,19 +178,38 @@ namespace Match3Core
         }
         #endregion
 
+        private bool needToCheckPossibleMove = false;
+        private bool needToCheckMatch = false;
+        private Direction needToCheckNeighborPossibleMove = Direction.None;
+
         internal GemController()
         {
             id = ID++;
+            possibleMoves.Add(PossibleMove.Role.Key, new List<PossibleMove>());
+            possibleMoves.Add(PossibleMove.Role.Participant, new List<PossibleMove>());
         }
 
-        internal void Init(bool animated)
+        internal void Init(bool beggining)
         {
             Logger.Instance.Message(this.ToString() + " was initialized");
             IsActive = true;
+            if (beggining)
+            {
+                needToCheckNeighbor = true;
+            }
             if (null != OnAppear)
             {
-                OnAppear(this, animated);
+                OnAppear(this, beggining);
             }
+        }
+
+        internal void Deinit()
+        {
+            Clear();
+            needToCheckPossibleMove = false;
+            needToCheckMatch = false;
+            needToCheckNeighborPossibleMove = Direction.None;
+            neighborChangedFlag = Direction.None;
         }
 
         internal void SetGemType(GemType type)
@@ -207,8 +225,8 @@ namespace Match3Core
         internal void SetPosition(int x, int y, bool interpolate = false)
         {
             Logger.Instance.Message(this.ToString() + " position was set to " + x + "," + y);
-            CurrentX = x;
-            CurrentY = y;
+            position.x = x;
+            position.y = y;
             if (interpolate)
             {
                 OnMovingStart();
@@ -236,33 +254,54 @@ namespace Match3Core
             }
         }
 
-        public void CheckNeighbor()
+        public void Update()
         {
-            if (NeighborChangedFlag != Direction.None)
+            if (CurrentState == State.Idle)
             {
-                OnNeighborChanged();
+                checkedForPossibleMove = false;
+                if (needToCheckPossibleMove)
+                {
+                    CheckForPossibleMove();
+                }
+                if (needToCheckMatch)
+                {
+                    CheckForMatch();
+                }
+                if (needToCheckNeighbor && NeighborChangedFlag != Direction.None)
+                {
+                    CheckNeighbors();
+                }
             }
         }
 
-        private void OnNeighborChanged()
+        internal void CheckNeighbors()
         {
             if ((neighborChangedFlag & Direction.Left) == Direction.Left)
             {
-                CheckNeighbor(leftNeighbor);
+                CheckNeighbor(leftNeighbor, Direction.Left);
             }
             if ((neighborChangedFlag & Direction.Right) == Direction.Right)
             {
-                CheckNeighbor(rightNeighbor);
+                CheckNeighbor(rightNeighbor, Direction.Right);
             }
             if ((neighborChangedFlag & Direction.Up) == Direction.Up)
             {
-                CheckNeighbor(upNeighbor);
+                CheckNeighbor(upNeighbor, Direction.Up);
             }
             if ((neighborChangedFlag & Direction.Down) == Direction.Down)
             {
-                CheckNeighbor(downNeighbor);
+                CheckNeighbor(downNeighbor, Direction.Down);
             }
+            if (neighborChangedFlag != Direction.None)
+            {
+                return;
+            }
+            needToCheckNeighbor = false;
+            needToCheckMatch = true;
+        }
 
+        private void CheckForMatch()
+        {
             if (possibleMatches.Count > 1)
             {
                 List<PossibleMatch> posMatch = new List<PossibleMatch>(possibleMatches);
@@ -278,7 +317,7 @@ namespace Match3Core
                         {
                             posMatch[i].Merge(posMatch[j]);
                         }
-                        else if (posMatch[i].IsMatched() && posMatch[j].IsMatched())
+                        else if (posMatch[i].IsMatch() && posMatch[j].IsMatch())
                         {
                             posMatch[i].Merge(posMatch[j]);
                         }
@@ -289,13 +328,16 @@ namespace Match3Core
             bool isMatched = false;
             for (int i = possibleMatches.Count - 1; i >= 0; i--)
             {
-                if (possibleMatches[i].CheckMatch())
+                if (possibleMatches[i].IsMatch())
                 {
-                    if (currentSwipeAction != null)
+                    if (currentSwipeAction != null && possibleMatches[i].MatchInitiator == null)
                     {
                         possibleMatches[i].MatchInitiator = this;
                     }
-                    isMatched = true;
+                    if (possibleMatches[i].Match())
+                    {
+                        isMatched = true;
+                    }
                 }
             }
 
@@ -304,38 +346,50 @@ namespace Match3Core
                 currentSwipeAction.SetGemSwipeResult(this, isMatched);
             }
 
-            neighborChangedFlag = Direction.None;
+            if (!isMatched)
+            {
+                needToCheckPossibleMove = true;
+            }
+
+            needToCheckMatch = false;
         }
 
-        private void CheckNeighbor(GemController neighbor)
+        private void CheckNeighbor(GemController neighbor, Direction neighborDirection)
         {
             if (null == neighbor)
+            {
+                neighborChangedFlag &= (~neighborDirection);
+                return;
+            }
+            if (!neighbor.IsActive)
             {
                 return;
             }
             if (!neighbor.CurrentGemType.HasSameFlags(this.CurrentGemType))
             {
+                neighborChangedFlag &= (~neighborDirection);
                 return;
             }
-            bool gemAdded = false;
+            PossibleMatch addedPossibleMatch = null;
             foreach (PossibleMatch possibleMatch in neighbor.PossibleMatches)
             {
                 if (possibleMatch.AddGem(this))
                 {
-                    gemAdded = true;
+                    addedPossibleMatch = possibleMatch;
                 }
             }
-            if (!gemAdded)
+            if (addedPossibleMatch == null)
             {
-                PossibleMatch possibleMatch = new PossibleMatch(this.CurrentGemType.GetSameFlags(neighbor.CurrentGemType));
-                possibleMatch.AddGem(this);
-                Logger.Instance.Message(this.ToString() + " adding neighbor " + neighbor.ToString() + " to " + possibleMatch.ToString());
-                possibleMatch.AddGem(neighbor);
+                addedPossibleMatch = new PossibleMatch(this.CurrentGemType.GetSameFlags(neighbor.CurrentGemType));
+                addedPossibleMatch.AddGem(this);
+                Logger.Instance.Message(this.ToString() + " adding neighbor " + neighbor.ToString() + " to " + addedPossibleMatch.ToString());
+                addedPossibleMatch.AddGem(neighbor);
                 if (null != OnPossibleMatchAddedEvent)
                 {
-                    OnPossibleMatchAddedEvent(this, possibleMatch);
+                    OnPossibleMatchAddedEvent(this, addedPossibleMatch);
                 }
             }
+            neighborChangedFlag &= (~neighborDirection);
         }
 
         private void Clear()
@@ -345,10 +399,22 @@ namespace Match3Core
             {
                 possibleMatches[i].RemoveGem(this);
             }
+            for (int i = possibleMoves[PossibleMove.Role.Key].Count - 1; i >= 0; i--)
+            {
+                possibleMoves[PossibleMove.Role.Key][i].RemoveKey(this);
+            }
+            for (int i = possibleMoves[PossibleMove.Role.Participant].Count - 1; i >= 0; i--)
+            {
+                possibleMoves[PossibleMove.Role.Participant][i].RemoveParticipant(this);
+            }
         }
 
         public void MoveTo(Direction direction)
         {
+            if (!IsActive)
+            {
+                return;
+            }
             Logger.Instance.Message(this.ToString() + " moving to " + direction);
             if (null != OnMovingToEvent)
             {
@@ -368,6 +434,8 @@ namespace Match3Core
             Logger.Instance.Message(this.ToString() + " moving finished");
             IsActive = true;
             CurrentState = State.Idle;
+            needToCheckNeighbor = true;
+            needToCheckNeighborPossibleMove = Direction.Left | Direction.Right | Direction.Up | Direction.Down;
             if (null != OnReadyEvent)
             {
                 OnReadyEvent(this);
@@ -389,16 +457,19 @@ namespace Match3Core
             {
                 OnFadeout(this);
             }
-            if (null != OnSpecialMatch)
+            if (SpecialType != GemSpecialType.Regular)
             {
-                OnSpecialMatch(this, SpecialType);
+                if (null != OnSpecialMatch)
+                {
+                    OnSpecialMatch(this, SpecialType);
+                }
             }
         }
 
         public void OnAppearOver()
         {
             Logger.Instance.Message(this.ToString() + " OnAppearOver");
-            IsActive = true;
+            //IsActive = true;
             if (null != OnReadyEvent)
             {
                 OnReadyEvent(this);
@@ -414,9 +485,184 @@ namespace Match3Core
             }
         }
 
+        internal PossibleMatch GetPossibleMatchByDirection(Line direction)
+        {
+            foreach (PossibleMatch pm in possibleMatches)
+            {
+                if (pm.MatchDirection == direction)
+                {
+                    return pm;
+                }
+            }
+            return null;
+        }
+
+        private bool checkedForPossibleMove = false;
+        internal void CheckForPossibleMove()
+        {
+            if (checkedForPossibleMove)
+            {
+                return;
+            }
+            checkedForPossibleMove = true;
+            Dictionary<GemType, Dictionary<Line, List<GemController>>> matchedNeighbors = new Dictionary<GemType, Dictionary<Line, List<GemController>>>();
+            Direction[] directions = Enum.GetValues(typeof(Direction)).Cast<Direction>().Where(v => v != Direction.None).ToArray();
+            List<GemController> availableNeighbors = new List<GemController>();
+            foreach (Direction dir in directions)
+            {
+                GemController neighbor = GetNeighbor(dir);
+                if (neighbor != null && neighbor.CurrentGemType != CurrentGemType && neighbor.IsActive)
+                {
+                    availableNeighbors.Add(neighbor);
+                }
+            }
+            if (availableNeighbors.Count <= 1)
+            {
+                needToCheckPossibleMove = false;
+                return;
+            }
+            for (int i = 0; i < availableNeighbors.Count; i++)
+            {
+                for (int j = i + 1; j < availableNeighbors.Count; j++)
+                {
+                    if (availableNeighbors[i].CurrentGemType == availableNeighbors[j].CurrentGemType)
+                    {
+                        if (!matchedNeighbors.ContainsKey(availableNeighbors[i].CurrentGemType))
+                        {
+                            matchedNeighbors[availableNeighbors[i].CurrentGemType] = new Dictionary<Line, List<GemController>>();
+                        }
+                        Line gemLine = DirectionHelper.GetLineByDirection(GetDirectionByNeighbor(availableNeighbors[i]));
+                        if (!matchedNeighbors[availableNeighbors[i].CurrentGemType].ContainsKey(gemLine))
+                        {
+                            matchedNeighbors[availableNeighbors[i].CurrentGemType][gemLine] = new List<GemController>();
+                        }
+                        if (!matchedNeighbors[availableNeighbors[i].CurrentGemType][gemLine].Contains(availableNeighbors[i]))
+                        {
+                            matchedNeighbors[availableNeighbors[i].CurrentGemType][gemLine].Add(availableNeighbors[i]);
+                        }
+                        Line gemgemLine = DirectionHelper.GetLineByDirection(GetDirectionByNeighbor(availableNeighbors[j]));
+                        if (!matchedNeighbors[availableNeighbors[j].CurrentGemType].ContainsKey(gemgemLine))
+                        {
+                            matchedNeighbors[availableNeighbors[j].CurrentGemType][gemgemLine] = new List<GemController>();
+                        }
+                        if (!matchedNeighbors[availableNeighbors[j].CurrentGemType][gemgemLine].Contains(availableNeighbors[j]))
+                        {
+                            matchedNeighbors[availableNeighbors[j].CurrentGemType][gemgemLine].Add(availableNeighbors[j]);
+                        }
+                    }
+                }
+            }
+            foreach (GemType type in matchedNeighbors.Keys)
+            {
+                foreach (Line line in matchedNeighbors[type].Keys)
+                {
+                    Line oppositeLine = line == Line.Horizontal ? Line.Vertical : Line.Horizontal;
+                    if (matchedNeighbors[type][line].Count > 1)
+                    {
+                        if (matchedNeighbors[type].ContainsKey(oppositeLine))
+                        {
+                            foreach (GemController keygem in matchedNeighbors[type][oppositeLine])
+                            {
+                                PossibleMoveFound(matchedNeighbors[type][line].ToArray(), keygem, line);
+                            }
+                        }
+                        for (int i = 0; i < matchedNeighbors[type][line].Count; i++)
+                        {
+                            int otherindex = i == 0 ? 1 : 0;
+                            if (matchedNeighbors[type][line][i].GetPossibleMatchByDirection(line) != null)
+                            {
+                                PossibleMoveFound(new GemController[] { matchedNeighbors[type][line][i] }, matchedNeighbors[type][line][otherindex], line);
+                            }
+                        }
+                    }
+                    else if (matchedNeighbors[type][line].Count == 1)
+                    {
+                        if (matchedNeighbors[type].ContainsKey(oppositeLine))
+                        {
+                            if (matchedNeighbors[type][line][0].GetPossibleMatchByDirection(line) != null)
+                            {
+                                foreach (GemController keygem in matchedNeighbors[type][oppositeLine])
+                                {
+                                    PossibleMoveFound(matchedNeighbors[type][line].ToArray(), keygem, line);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            needToCheckPossibleMove = false;
+            if (needToCheckNeighborPossibleMove != Direction.None)
+            {
+                Direction[] dirs = Enum.GetValues(typeof(Direction)).Cast<Direction>().Where(d => d != Direction.None).ToArray();
+                foreach (Direction dir in dirs)
+                {
+                    CheckNeighborPossibleMove(dir);
+                }
+            }
+        }
+
+        private void CheckNeighborPossibleMove(Direction direction)
+        {
+            GemController neighbor = GetNeighbor(direction);
+            if ((needToCheckNeighborPossibleMove & direction) == direction && neighbor != null && neighbor.IsActive)
+            {
+                bool havesamepossiblematch = false;
+                foreach (PossibleMatch pm in neighbor.PossibleMatches)
+                {
+                    if (PossibleMatches.Contains(pm))
+                    {
+                        havesamepossiblematch = true;
+                    }
+                }
+                if (havesamepossiblematch)
+                {
+                    neighbor.GetNeighbor(direction)?.CheckForPossibleMove();
+                }
+                else
+                {
+                    neighbor.CheckForPossibleMove();
+                }
+            }
+            needToCheckNeighborPossibleMove &= (~direction);
+        }
+
+        private void PossibleMoveFound(GemController[] participantsNeighbors, GemController key, Line direction)
+        {
+            if (null != OnPossibleMoveFound)
+            {
+                OnPossibleMoveFound(this, participantsNeighbors, key, direction);
+            }
+        }
+
+        private Direction GetDirectionByNeighbor(GemController neighbor)
+        {
+            if (neighbor == null)
+            {
+                return Direction.None;
+            }
+            return DirectionHelper.GetDirectionByPosition(Position, neighbor.Position);
+        }
+
+        #region PossibleMoves
+        private Dictionary<PossibleMove.Role, List<PossibleMove>> possibleMoves = new Dictionary<PossibleMove.Role, List<PossibleMove>>();
+        public Dictionary<PossibleMove.Role, List<PossibleMove>> PossibleMoves
+        {
+            get { return possibleMoves; }
+        }
+        internal void AddPossibleMove(PossibleMove possibleMove, PossibleMove.Role role)
+        {
+            possibleMoves[role].Add(possibleMove);
+        }
+
+        internal void RemovePossibleMove(PossibleMove possibleMove, PossibleMove.Role role)
+        {
+            possibleMoves[role].Remove(possibleMove);
+        }
+        #endregion
+
         public override string ToString()
         {
-            return "Gem[" + id + "," + CurrentX + "," + CurrentY + "," + CurrentGemType + "," + SpecialType + "," + CurrentState + "]";
+            return "Gem[" + id + "," + Position.x + "," + Position.y + "," + CurrentGemType + "," + SpecialType + "," + CurrentState + "]";
         }
     }
 }

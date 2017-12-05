@@ -7,11 +7,16 @@ using System.Windows.Media.Imaging;
 using Match3Core;
 using System.Threading.Tasks;
 using System.Windows.Media;
+using System.Reflection;
+using System.IO;
 
 namespace Match3CoreDemo
 {
     class GemControllerWrapper
     {
+        public delegate void GemControllerEventDelegate(GemControllerWrapper sender);
+        public event GemControllerEventDelegate OnOverEvent;
+
         private static Dictionary<GemType, BitmapImage> GemImages;
         private static Dictionary<GemSpecialType, BitmapImage> SpecialTypeImages;
 
@@ -70,7 +75,7 @@ namespace Match3CoreDemo
             {
                 return;
             }
-            instance.CheckNeighbor();
+            instance.Update();
         }
 
         public void OnMovingStart()
@@ -91,11 +96,15 @@ namespace Match3CoreDemo
         private void PrepareGemImages()
         {
             GemImages = new Dictionary<GemType, BitmapImage>();
-            GemType[] gemTypes = Enum.GetValues(typeof(GemType)).Cast<GemType>().ToArray();
+            GemType[] gemTypes = Enum.GetValues(typeof(GemType)).Cast<GemType>().Where(v => v != GemType.All).ToArray();
             foreach (GemType gemtype in gemTypes)
             {
-                BitmapImage bi = new BitmapImage(new Uri("pack://siteoforigin:,,,/Resources/" + gemtype.ToString() + ".png"));
-                GemImages.Add(gemtype, bi);
+                string filename = Environment.CurrentDirectory + @"\Resources\" + gemtype.ToString() + ".png";
+                if (File.Exists(filename))
+                {
+                    BitmapImage bi = new BitmapImage(new Uri(filename));
+                    GemImages.Add(gemtype, bi);
+                }
             }
         }
 
@@ -105,13 +114,19 @@ namespace Match3CoreDemo
             GemSpecialType[] gemSpecialTypes = Enum.GetValues(typeof(GemSpecialType)).Cast<GemSpecialType>().ToArray();
             foreach (GemSpecialType gemspecialtype in gemSpecialTypes)
             {
-                BitmapImage bi = new BitmapImage(new Uri("pack://siteoforigin:,,,/Resources/" + gemspecialtype.ToString() + ".png"));
-                SpecialTypeImages.Add(gemspecialtype, bi);
+                string filename = Environment.CurrentDirectory + @"\Resources\" + gemspecialtype.ToString() + ".png";
+                if (File.Exists(filename))
+                {
+                    BitmapImage bi = new BitmapImage(new Uri(filename));
+                    SpecialTypeImages.Add(gemspecialtype, bi);
+                }
             }
         }
 
         private void OnAppear(GemController sender, bool animated)
         {
+            image.Opacity = 1.0;
+            specialImage.Opacity = 1.0;
             Task.Delay(500).ContinueWith(_ =>
             {
                 instance.OnAppearOver();
@@ -130,7 +145,10 @@ namespace Match3CoreDemo
 
         private void OnTypeChanged(GemController sender, GemType type)
         {
-            image.Source = GemImages[type];
+            if (GemImages.ContainsKey(type))
+            {
+                image.Source = GemImages[type];
+            }
         }
 
         private void OnPositionChanged(GemController sender, int x, int y, bool interpolate)
@@ -154,7 +172,10 @@ namespace Match3CoreDemo
 
         private void OnSpecialTypeChanged(GemController sender, GemSpecialType specialType)
         {
-            specialImage.Source = SpecialTypeImages[specialType];
+            if (SpecialTypeImages.ContainsKey(specialType))
+            {
+                specialImage.Source = SpecialTypeImages[specialType];
+            }
         }
     }
 }

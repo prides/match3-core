@@ -19,6 +19,7 @@ namespace Match3Core
                 new TileType[] { TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular},
                 new TileType[] { TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular},
             };
+        private GemStackManager gemStackManager;
         private GemController[][] gems;
         private List<PossibleMatch> possibleMatches = new List<PossibleMatch>();
         private List<PossibleMatch> matchedMatches = new List<PossibleMatch>();
@@ -28,6 +29,7 @@ namespace Match3Core
             Logger.Instance.Message("GemManager was created");
             this.rowCount = rowCount;
             this.columnCount = columnCount;
+            gemStackManager = new GemStackManager();
         }
 
         public void Init()
@@ -44,10 +46,30 @@ namespace Match3Core
                     }
                 }
             }
+            for (int x = 0; x < columnCount; x++)
+            {
+                for (int y = 0; y < rowCount; y++)
+                {
+                    if (null != gems[x][y])
+                    {
+                        SetGemNeighbor(gems[x][y]);
+                    }
+                }
+            }
+            for (int x = 0; x < columnCount; x++)
+            {
+                for (int y = 0; y < rowCount; y++)
+                {
+                    if (null != gems[x][y])
+                    {
+                        gems[x][y].CheckNeighbors();
+                    }
+                }
+            }
             Logger.Instance.Message("GemManager was initialized");
         }
 
-        public void DeInit()
+        public void Deinit()
         {
             if (null != gems)
             {
@@ -62,10 +84,12 @@ namespace Match3Core
                             gems[x][y].OnMovingToEvent -= OnGemMove;
                             gems[x][y].OnDissapear -= OnGemDissapear;
                             gems[x][y].OnSpecialMatch -= OnSpecialGemMatch;
+                            gems[x][y].OnPossibleMoveFound -= OnPossibleMoveFound;
                         }
                     }
                 }
             }
+            gemStackManager.Deinit();
             Logger.Instance.Message("GemManager was deinitialized");
         }
 
@@ -82,22 +106,22 @@ namespace Match3Core
                     Logger.Instance.Message(pm.ToString() + " was matched");
 
                     List<GemController> matchedGems = new List<GemController>(pm.MatchedGems);
-                    if (matchedGems.Count > 3)
+                    if (matchedGems.Count > 3 && !pm.IsContainer)
                     {
                         GemSpecialType type = GemSpecialType.Regular;
-                        if (matchedGems.Count > 4 && (pm.MatchDirection == PossibleMatch.Line.Horizontal || pm.MatchDirection == PossibleMatch.Line.Vertical))
+                        if (matchedGems.Count > 4 && (pm.MatchDirection == Line.Horizontal || pm.MatchDirection == Line.Vertical))
                         {
                             type = GemSpecialType.HitType;
                         }
-                        else if (pm.MatchDirection == PossibleMatch.Line.Cross)
+                        else if (pm.MatchDirection == Line.Cross)
                         {
                             type = GemSpecialType.Bomb;
                         }
-                        else if (pm.MatchDirection == PossibleMatch.Line.Horizontal)
+                        else if (pm.MatchDirection == Line.Vertical)
                         {
                             type = GemSpecialType.Horizontal;
                         }
-                        else if (pm.MatchDirection == PossibleMatch.Line.Vertical)
+                        else if (pm.MatchDirection == Line.Horizontal)
                         {
                             type = GemSpecialType.Vertical;
                         }
@@ -112,11 +136,9 @@ namespace Match3Core
 
                     foreach (GemController gem in matchedGems)
                     {
-                        //gem.PossibleMatches.Remove(pm);
-                        RemoveGemNeighbor(gem);
-                        gem.OnMatch();
+                        MatchGem(gem);
                     }
-                    pm.Clear();
+                    pm.Over();
                 }
                 matchedMatches.Clear();
             }
@@ -129,14 +151,16 @@ namespace Match3Core
         private void RefillColums()
         {
             List<int> needToCheckColums = new List<int>();
+            List<GemController> gemsUpdateNeighbors = new List<GemController>();
             lock (dissapearedGemsLocker)
             {
                 foreach (GemController gem in dissapearedGems)
                 {
-                    if (!needToCheckColums.Contains(gem.CurrentX))
+                    if (!needToCheckColums.Contains(gem.Position.x))
                     {
-                        needToCheckColums.Add(gem.CurrentX);
+                        needToCheckColums.Add(gem.Position.x);
                     }
+                    gemStackManager.Push(gem);
                 }
                 dissapearedGems.Clear();
             }
@@ -165,8 +189,8 @@ namespace Match3Core
                         break;
                     }
 
-                    RemoveGemNeighbor(gems[x][posFromY]);
                     gems[x][posFromY].SetPosition(x, posToY, true);
+                    gemsUpdateNeighbors.Add(gems[x][posFromY]);
                     SwitchGems(x, posToY, x, posFromY);
                 }
                 posFromY = 0;
@@ -177,11 +201,17 @@ namespace Match3Core
                 int posYdiff = rowCount - posFromY;
                 while (posFromY < rowCount)
                 {
-                    gems[x][posFromY] = CreateGem(x, posFromY, false);
-                    gems[x][posFromY].SetPosition(x, posFromY + posYdiff, false);
-                    gems[x][posFromY].SetPosition(x, posFromY, true);
+                    GemController gem = CreateGem(x, posFromY, false);
+                    gems[x][posFromY] = gem;
+                    gem.SetPosition(x, posFromY + posYdiff, false);
+                    gem.SetPosition(x, posFromY, true);
                     posFromY++;
+                    gemsUpdateNeighbors.Add(gem);
                 }
+            }
+            foreach (GemController gem in gemsUpdateNeighbors)
+            {
+                SetGemNeighbor(gem);
             }
         }
 
@@ -189,44 +219,48 @@ namespace Match3Core
         {
             Logger.Instance.Message("Special " + sender.ToString() + " matched");
             List<GemController> hitGems = new List<GemController>();
+            int bombsize = type == GemSpecialType.DoubleBomb ? 5 : 3;
             switch(type)
             {
                 case GemSpecialType.Horizontal:
-                    for (int x = 0; x < columnCount; x++)
-                    {
-                        if (x == sender.CurrentX)
-                        {
-                            continue;
-                        }
-                        GemController gem = gems[x][sender.CurrentY];
-                        if (gem == null)
-                        {
-                            continue;
-                        }
-                        hitGems.Add(gem);
-                    }
+                    hitGems.AddRange(GetGemsByRowIndex(sender.Position.y));
                     break;
                 case GemSpecialType.Vertical:
-                    for (int y = 0; y < rowCount; y++)
+                    hitGems.AddRange(GetGemsByColumnIndex(sender.Position.x));
+                    break;
+                case GemSpecialType.Vertical | GemSpecialType.Horizontal:
+                    hitGems.AddRange(GetGemsByRowIndex(sender.Position.y));
+                    hitGems.AddRange(GetGemsByColumnIndex(sender.Position.x));
+                    break;
+                case GemSpecialType.Vertical | GemSpecialType.Bomb:
+                    if (sender.Position.x - 1 >= 0)
                     {
-                        if (y == sender.CurrentY)
-                        {
-                            continue;
-                        }
-                        GemController gem = gems[sender.CurrentX][y];
-                        if (gem == null)
-                        {
-                            continue;
-                        }
-                        hitGems.Add(gem);
+                        hitGems.AddRange(GetGemsByColumnIndex(sender.Position.x - 1));
+                    }
+                    hitGems.AddRange(GetGemsByColumnIndex(sender.Position.x));
+                    if (sender.Position.x + 1 < columnCount)
+                    {
+                        hitGems.AddRange(GetGemsByColumnIndex(sender.Position.x + 1));
                     }
                     break;
-                case GemSpecialType.Bomb:
-                    for (int x = sender.CurrentX - 1; x <= sender.CurrentX + 1; x++)
+                case GemSpecialType.Horizontal | GemSpecialType.Bomb:
+                    if (sender.Position.y - 1 >= 0)
                     {
-                        for (int y = sender.CurrentY - 1; y <= sender.CurrentY + 1; y++)
+                        hitGems.AddRange(GetGemsByRowIndex(sender.Position.y - 1));
+                    }
+                    hitGems.AddRange(GetGemsByRowIndex(sender.Position.y));
+                    if (sender.Position.y + 1 < rowCount)
+                    {
+                        hitGems.AddRange(GetGemsByRowIndex(sender.Position.y + 1));
+                    }
+                    break;
+                case GemSpecialType.DoubleBomb:
+                case GemSpecialType.Bomb:
+                    for (int x = sender.Position.x - (bombsize / 2); x <= sender.Position.x + (bombsize / 2); x++)
+                    {
+                        for (int y = sender.Position.y - (bombsize / 2); y <= sender.Position.y + (bombsize / 2); y++)
                         {
-                            if (y == sender.CurrentY && x == sender.CurrentX)
+                            if (y < 0 || x < 0 || y >= rowCount || x >= columnCount)
                             {
                                 continue;
                             }
@@ -240,25 +274,6 @@ namespace Match3Core
                     }
                     break;
                 case GemSpecialType.HitType:
-                    for (int x = 0; x < columnCount; x++)
-                    {
-                        for (int y = 0; y < rowCount; y++)
-                        {
-                            if (y == sender.CurrentY && x == sender.CurrentX)
-                            {
-                                continue;
-                            }
-                            GemController gem = gems[x][y];
-                            if (gem == null)
-                            {
-                                continue;
-                            }
-                            if (gem.CurrentGemType.HasSameFlags(sender.CurrentGemType))
-                            {
-                                hitGems.Add(gem);
-                            }
-                        }
-                    }
                     break;
                 default:
                     Logger.Instance.Error("unknown special type " + type + " of " + sender.ToString());
@@ -266,14 +281,17 @@ namespace Match3Core
             }
             foreach (GemController gem in hitGems)
             {
-                RemoveGemNeighbor(gem);
-                gem.OnMatch();
+                if (gem == sender)
+                {
+                    continue;
+                }
+                MatchGem(gem);
             }
         }
 
         private void OnGemReady(GemController sender)
         {
-            SetGemNeighbor(sender);
+            //SetGemNeighbor(sender);
         }
 
         private void OnPossibleMatchAdded(GemController sender, PossibleMatch possibleMatch)
@@ -308,29 +326,13 @@ namespace Match3Core
 
         private void SetGemNeighbor(GemController gem)
         {
-            int x = gem.CurrentX;
-            int y = gem.CurrentY;
+            int x = gem.Position.x;
+            int y = gem.Position.y;
 
             GemController leftNeighbor = x - 1 >= 0 ? gems[x - 1][y] : null;
-            if (null != leftNeighbor && leftNeighbor.CurrentState != GemController.State.Idle)
-            {
-                leftNeighbor = null;
-            }
             GemController rightNeighbor = x + 1 < columnCount ? gems[x + 1][y] : null;
-            if (null != rightNeighbor && rightNeighbor.CurrentState != GemController.State.Idle)
-            {
-                rightNeighbor = null;
-            }
             GemController upNeighbor = y + 1 < rowCount ? gems[x][y + 1] : null;
-            if (null != upNeighbor && upNeighbor.CurrentState != GemController.State.Idle)
-            {
-                upNeighbor = null;
-            }
             GemController downNeighbor = y - 1 >= 0 ? gems[x][y - 1] : null;
-            if (null != downNeighbor && downNeighbor.CurrentState != GemController.State.Idle)
-            {
-                downNeighbor = null;
-            }
 
             gem.LeftNeighbor = leftNeighbor;
             gem.RightNeighbor = rightNeighbor;
@@ -382,10 +384,20 @@ namespace Match3Core
 
         private GemController CreateGem(int x, int y, bool beggining = true)
         {
-            GemController gem = new GemController();
-            if (null != OnGemCreated)
+            GemController gem = gemStackManager.Pop();
+            if (gem == null)
             {
-                OnGemCreated(gem);
+                gem = new GemController();
+                gem.OnReadyEvent += OnGemReady;
+                gem.OnPossibleMatchAddedEvent += OnPossibleMatchAdded;
+                gem.OnMovingToEvent += OnGemMove;
+                gem.OnDissapear += OnGemDissapear;
+                gem.OnSpecialMatch += OnSpecialGemMatch;
+                gem.OnPossibleMoveFound += OnPossibleMoveFound;
+                if (null != OnGemCreated)
+                {
+                    OnGemCreated(gem);
+                }
             }
             gem.SetPosition(x, y);
 
@@ -407,11 +419,6 @@ namespace Match3Core
             GemType type = (~unacceptableType).Random();
 
             gem.SetGemType(type);
-            gem.OnReadyEvent += OnGemReady;
-            gem.OnPossibleMatchAddedEvent += OnPossibleMatchAdded;
-            gem.OnMovingToEvent += OnGemMove;
-            gem.OnDissapear += OnGemDissapear;
-            gem.OnSpecialMatch += OnSpecialGemMatch;
             gem.Init(beggining);
             return gem;
         }
@@ -437,16 +444,22 @@ namespace Match3Core
             {
                 return;
             }
-            int x1 = gem.CurrentX;
-            int y1 = gem.CurrentY;
-            int x2 = neighbor.CurrentX;
-            int y2 = neighbor.CurrentY;
+            if (gem.SpecialType != GemSpecialType.Regular && neighbor.SpecialType != GemSpecialType.Regular ||
+                gem.SpecialType == GemSpecialType.HitType || neighbor.SpecialType == GemSpecialType.HitType)
+            {
+                DoSpecialSwipe(gem, neighbor);
+                return;
+            }
+            int x1 = gem.Position.x;
+            int y1 = gem.Position.y;
+            int x2 = neighbor.Position.x;
+            int y2 = neighbor.Position.y;
 
-            RemoveGemNeighbor(gem);
-            RemoveGemNeighbor(neighbor);
             SwitchGems(x1, y1, x2, y2);
             gem.SetPosition(x2, y2, true);
             neighbor.SetPosition(x1, y1, true);
+            SetGemNeighbor(gem);
+            SetGemNeighbor(neighbor);
             SwipeAction swipeAction = new SwipeAction(gem, neighbor);
             swipeAction.OnSwipeActionOver += OnSwipeOver;
             gem.CurrentSwipeAction = swipeAction;
@@ -467,13 +480,15 @@ namespace Match3Core
             {
                 return;
             }
-            int x1 = gem1.CurrentX;
-            int y1 = gem1.CurrentY;
-            int x2 = gem2.CurrentX;
-            int y2 = gem2.CurrentY;
+            int x1 = gem1.Position.x;
+            int y1 = gem1.Position.y;
+            int x2 = gem2.Position.x;
+            int y2 = gem2.Position.y;
             SwitchGems(x1, y1, x2, y2);
             gem1.SetPosition(x2, y2, true);
             gem2.SetPosition(x1, y1, true);
+            SetGemNeighbor(gem1);
+            SetGemNeighbor(gem2);
         }
 
         private void SwitchGems(int x1, int y1, int x2, int y2)
@@ -483,5 +498,211 @@ namespace Match3Core
             gems[x1][y1] = gems[x2][y2];
             gems[x2][y2] = tmpgem;
         }
+
+        private void DoSpecialSwipe(GemController gem, GemController neighbor)
+        {
+            if (gem == null || neighbor == null)
+            {
+                Logger.Instance.Error("DoSpecialSwipe(): gem or neighbor is null");
+                return;
+            }
+            if (neighbor.SpecialType == GemSpecialType.HitType && gem.SpecialType == GemSpecialType.HitType)
+            {
+                BreakByType(GemType.All);
+            }
+            else if (gem.SpecialType == GemSpecialType.HitType)
+            {
+                if (neighbor.SpecialType != GemSpecialType.Regular)
+                {
+                    SetSpecialTypeByType(neighbor.SpecialType, neighbor.CurrentGemType);
+                }
+                BreakByType(neighbor.CurrentGemType);
+                MatchGem(gem);
+            }
+            else if (neighbor.SpecialType == GemSpecialType.HitType)
+            {
+                if (gem.SpecialType != GemSpecialType.Regular)
+                {
+                    SetSpecialTypeByType(gem.SpecialType, gem.CurrentGemType);
+                }
+                BreakByType(gem.CurrentGemType);
+                MatchGem(neighbor);
+            }
+            else
+            {
+                GemSpecialType newSpecialType = GemSpecialType.Regular;
+                if (neighbor.SpecialType == gem.SpecialType)
+                {
+                    switch(neighbor.SpecialType)
+                    {
+                        case GemSpecialType.Bomb:
+                            newSpecialType = GemSpecialType.DoubleBomb;
+                            break;
+                        case GemSpecialType.Horizontal:
+                        case GemSpecialType.Vertical:
+                            newSpecialType = GemSpecialType.Horizontal | GemSpecialType.Vertical;
+                            break;
+                    }
+                }
+                else
+                {
+                    newSpecialType = neighbor.SpecialType | gem.SpecialType;
+                }
+                neighbor.SpecialType = newSpecialType;
+                gem.SpecialType = GemSpecialType.Regular;
+                MatchGem(gem);
+                MatchGem(neighbor);
+            }
+        }
+
+        private void SetSpecialTypeByType(GemSpecialType specialType, GemType type)
+        {
+            if (null == gems)
+            {
+                Logger.Instance.Error("SetSpecialTypeByType(): gems not inited");
+            }
+            for (int x = 0; x < columnCount; x++)
+            {
+                for (int y = 0; y < rowCount; y++)
+                {
+                    if (null != gems[x][y] && gems[x][y].CurrentGemType.HasSameFlags(type))
+                    {
+                        gems[x][y].SpecialType = specialType;
+                    }
+                }
+            }
+        }
+
+        private void BreakByType(GemType type)
+        {
+            if (null == gems)
+            {
+                Logger.Instance.Error("BreakByType(): gems not inited");
+            }
+            PossibleMatch pm = new PossibleMatch(type, true);
+            for (int x = 0; x < columnCount; x++)
+            {
+                for (int y = 0; y < rowCount; y++)
+                {
+                    if (null != gems[x][y] && gems[x][y].CurrentGemType.HasSameFlags(type))
+                    {
+                        pm.AddGem(gems[x][y]);
+                    }
+                }
+            }
+            matchedMatches.Add(pm);
+        }
+
+        private List<GemController> GetGemsByRowIndex(int rowIndex)
+        {
+            List<GemController> result = new List<GemController>();
+            for (int x = 0; x < columnCount; x++)
+            {
+                GemController gem = gems[x][rowIndex];
+                if (gem == null)
+                {
+                    continue;
+                }
+                result.Add(gem);
+            }
+            return result;
+        }
+
+        private List<GemController> GetGemsByColumnIndex(int columnIndex)
+        {
+            List<GemController> result = new List<GemController>();
+            for (int y = 0; y < rowCount; y++)
+            {
+                GemController gem = gems[columnIndex][y];
+                if (gem == null)
+                {
+                    continue;
+                }
+                result.Add(gem);
+            }
+            return result;
+        }
+
+        private void MatchGem(GemController gem)
+        {
+            RemoveGemNeighbor(gem);
+            gem.OnMatch();
+        }
+
+        public void ShuffleGems()
+        {
+            for (int i = columnCount * rowCount - 1; i >= 0; i--)
+            {
+                int i0 = i / rowCount;
+                int i1 = i % rowCount;
+
+                int j = Randomizer.Range(0, i + 1);
+                int j0 = j / rowCount;
+                int j1 = j % rowCount;
+
+                GemController temp = gems[i0][i1];
+                gems[i0][i1] = gems[j0][j1];
+                gems[j0][j1] = temp;
+                gems[i0][i1].SetPosition(i0, i1, true);
+            }
+
+            for (int x = 0; x < columnCount; x++)
+            {
+                for (int y = 0; y < rowCount; y++)
+                {
+                    if (null != gems[x][y])
+                    {
+                        SetGemNeighbor(gems[x][y]);
+                    }
+                }
+            }
+        }
+
+        #region PossibleMoves
+        public delegate void PossibleMoveEvent(PossibleMove possibleMove);
+        public event PossibleMoveEvent OnPossibleMoveCreate;
+
+        private List<PossibleMove> possibleMoves = new List<PossibleMove>();
+        public List<PossibleMove> PossibleMoves
+        {
+            get { return possibleMoves; }
+        }
+        private void OnPossibleMoveFound(GemController sender, GemController[] participants, GemController key, Line direction)
+        {
+            foreach (PossibleMove pm in PossibleMoves)
+            {
+                if (pm.GetHashCode() == MatchUtils.CalculateHash(new int[] { key.Position.x, key.Position.y, sender.Position.x, sender.Position.y }))
+                {
+                    return;
+                }
+            }
+            List<GemController> participantsList = new List<GemController>();
+            foreach (GemController participant in participants)
+            {
+                PossibleMatch participantPossibleMatch = participant.GetPossibleMatchByDirection(direction);
+                if (participantPossibleMatch != null && !participantPossibleMatch.IsMatch())
+                {
+                    participantsList.AddRange(participantPossibleMatch.MatchedGems);
+                }
+                else
+                {
+                    participantsList.Add(participant);
+                }
+            }
+            PossibleMove possibleMove = new PossibleMove(participantsList, key, sender.Position, direction);
+            possibleMove.OnOver += PossibleMove_OnOver;
+            possibleMoves.Add(possibleMove);
+
+            if (OnPossibleMoveCreate != null)
+            {
+                OnPossibleMoveCreate(possibleMove);
+            }
+        }
+
+        private void PossibleMove_OnOver(PossibleMove sender)
+        {
+            possibleMoves.Remove(sender);
+        }
+        #endregion
     }
 }

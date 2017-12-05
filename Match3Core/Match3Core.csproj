@@ -44,10 +44,14 @@
     <Compile Include="GemController.cs" />
     <Compile Include="GemManager.cs" />
     <Compile Include="GemSpecialType.cs" />
+    <Compile Include="GemStackManager.cs" />
     <Compile Include="GemType.cs" />
     <Compile Include="GemTypeExtensions.cs" />
     <Compile Include="Logger.cs" />
+    <Compile Include="MatchUtils.cs" />
+    <Compile Include="Position.cs" />
     <Compile Include="PossibleMatch.cs" />
+    <Compile Include="PossibleMove.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Randomizer.cs" />
     <Compile Include="SwipeAction.cs" />
