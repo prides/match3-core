@@ -160,6 +160,7 @@ namespace Match3Core
                     {
                         needToCheckColums.Add(gem.Position.x);
                     }
+                    gems[gem.Position.x][gem.Position.y] = null;
                     gemStackManager.Push(gem);
                 }
                 dissapearedGems.Clear();
@@ -169,9 +170,15 @@ namespace Match3Core
                 Logger.Instance.Message("Check column " + x);
                 int posToY = 0;
                 int posFromY = 0;
+                string message = "";
+                for (int i = 0; i < rowCount; i++)
+                {
+                    message += (gems[x][i] != null ? gems[x][i].ToString() : "null") + (i == rowCount - 1 ? ", " : "");
+                }
+                Logger.Instance.Message("column " + x + " gems: " + message);
                 while (posFromY < rowCount)
                 {
-                    while (posToY < rowCount && ((gems[x][posToY] == null || gems[x][posToY].CurrentState != GemController.State.Matched) || tiles[x][posToY] == TileType.None))
+                    while (posToY < rowCount && (gems[x][posToY] != null || tiles[x][posToY] == TileType.None))
                     {
                         posToY++;
                     }
@@ -180,7 +187,7 @@ namespace Match3Core
                         break;
                     }
                     posFromY = posToY + 1;
-                    while (posFromY < rowCount && ((gems[x][posFromY] == null || gems[x][posFromY].CurrentState == GemController.State.Matched) || tiles[x][posToY] == TileType.None))
+                    while (posFromY < rowCount && (gems[x][posFromY] == null || tiles[x][posToY] == TileType.None))
                     {
                         posFromY++;
                     }
@@ -193,8 +200,11 @@ namespace Match3Core
                     gemsUpdateNeighbors.Add(gems[x][posFromY]);
                     SwitchGems(x, posToY, x, posFromY);
                 }
-                posFromY = 0;
-                while (posFromY < rowCount && ((gems[x][posFromY] == null || gems[x][posFromY].CurrentState != GemController.State.Matched) || tiles[x][posToY] == TileType.None))
+            }
+            foreach (int x in needToCheckColums)
+            {
+                int posFromY = 0;
+                while (posFromY < rowCount && (gems[x][posFromY] != null || tiles[x][posFromY] == TileType.None))
                 {
                     posFromY++;
                 }
@@ -493,7 +503,7 @@ namespace Match3Core
 
         private void SwitchGems(int x1, int y1, int x2, int y2)
         {
-            Logger.Instance.Message("Switching gems " + gems[x1][y1].ToString() + " and " + gems[x2][y2].ToString());
+            Logger.Instance.Message("Switching gems " + (gems[x1][y1] != null ? gems[x1][y1].ToString() : "null") + " and " + (gems[x2][y2] != null ? gems[x2][y2].ToString() : "null"));
             GemController tmpgem = gems[x1][y1];
             gems[x1][y1] = gems[x2][y2];
             gems[x2][y2] = tmpgem;

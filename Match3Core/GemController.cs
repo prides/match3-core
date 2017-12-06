@@ -210,6 +210,7 @@ namespace Match3Core
             needToCheckMatch = false;
             needToCheckNeighborPossibleMove = Direction.None;
             neighborChangedFlag = Direction.None;
+            SpecialType = GemSpecialType.Regular;
         }
 
         internal void SetGemType(GemType type)
