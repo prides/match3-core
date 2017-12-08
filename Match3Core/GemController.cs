@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -10,9 +9,12 @@ namespace Match3Core
         private static int ID = 0;
         private int id = 0;
 
+        public object tag;
+
         #region events
         public delegate void SimpleGemEventDelegate(GemController sender);
         internal event SimpleGemEventDelegate OnReadyEvent;
+        internal event SimpleGemEventDelegate OnNotReadyEvent;
 
         public delegate void PossibleMatchDelegate(GemController sender, PossibleMatch possibleMatch);
         internal event PossibleMatchDelegate OnPossibleMatchAddedEvent;
@@ -228,10 +230,6 @@ namespace Match3Core
             Logger.Instance.Message(this.ToString() + " position was set to " + x + "," + y);
             position.x = x;
             position.y = y;
-            if (interpolate)
-            {
-                OnMovingStart();
-            }
             if (null != OnPositionChanged)
             {
                 OnPositionChanged(this, x, y, interpolate);
@@ -428,6 +426,10 @@ namespace Match3Core
             Logger.Instance.Message(this.ToString() + " moving start");
             Clear();
             CurrentState = State.Moving;
+            if (null != OnNotReadyEvent)
+            {
+                OnNotReadyEvent(this);
+            }
         }
 
         public void OnMovingEnd()
@@ -457,6 +459,10 @@ namespace Match3Core
             if (null != OnFadeout)
             {
                 OnFadeout(this);
+            }
+            if (null != OnNotReadyEvent)
+            {
+                OnNotReadyEvent(this);
             }
             if (SpecialType != GemSpecialType.Regular)
             {

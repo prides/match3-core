@@ -36,6 +36,15 @@ namespace Match3CoreDemo
         private int rowCount = 7;
         private int columnCount = 7;
 
+        private int[][] emptyTiles = new int[][]
+        {
+            new int[] { 1, 1 },
+            new int[] { 2, 2 },
+            new int[] { 3, 3 },
+            new int[] { 4, 4 },
+            new int[] { 5, 5 },
+        };
+
         private List<GemControllerWrapper> gemControllers = new List<GemControllerWrapper>();
 
         public MainWindow()
@@ -88,7 +97,25 @@ namespace Match3CoreDemo
             Logger.Instance.OnWarningMessage += OnWarningMessage;
             Logger.Instance.OnErrorMessage += OnErrorMessage;
 
-            manager = new GemManager(rowCount, columnCount);
+            TileType[][] tiles = new TileType[columnCount][];
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                tiles[i] = new TileType[rowCount];
+                for (int j = 0; j < tiles[i].Length; j++)
+                {
+                    bool isempty = false;
+                    foreach (int[] index in emptyTiles)
+                    {
+                        if (index[0] == i && index[1] == j)
+                        {
+                            isempty = true;
+                        }
+                    }
+                    tiles[i][j] = isempty ? TileType.None : TileType.Regular;
+                }
+            }
+
+            manager = new GemManager(rowCount, columnCount/*, tiles*/);
             manager.OnGemCreated += OnGemCreated;
             manager.OnPossibleMoveCreate += OnPossibleMoveCreate;
             manager.Init();
@@ -108,17 +135,17 @@ namespace Match3CoreDemo
 
         private void OnWarningMessage(string message)
         {
-            //Console.WriteLine("[Warning]: " + message);
-            _logger.Warn("[Warning]: " + message);
+            Console.WriteLine("[Warning]: " + message);
+            //_logger.Warn("[Warning]: " + message);
         }
 
         private void OnErrorMessage(string message)
         {
-            //Console.WriteLine("[Error]: " + message);
-            _logger.Error("[Error]: " + message);
+            Console.WriteLine("[Error]: " + message);
+            //_logger.Error("[Error]: " + message);
         }
 
-        private void OnGemCreated(GemController gemController)
+        private void OnGemCreated(GemManager sender, GemController gemController)
         {
             GemControllerWrapper wrapper = new GemControllerWrapper(gemController);
             DrawCanvas.Children.Add(wrapper.GemImage);

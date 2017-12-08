@@ -4,31 +4,56 @@ namespace Match3Core
 {
     public class GemManager
     {
-        public delegate void GemCreatedEventDelegate(GemController instance);
-        public event GemCreatedEventDelegate OnGemCreated;
+        public delegate void EventDelegateWithGem(GemManager sender, GemController instance);
+        public event EventDelegateWithGem OnGemCreated;
+        public event EventDelegateWithGem OnGemMatch;
 
-        private int rowCount = 7;
-        private int columnCount = 7;
-        private TileType[][] tiles =
-            new TileType[][] {
-                new TileType[] { TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular},
-                new TileType[] { TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular},
-                new TileType[] { TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular},
-                new TileType[] { TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular},
-                new TileType[] { TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular},
-                new TileType[] { TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular},
-                new TileType[] { TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular, TileType.Regular},
-            };
+        public delegate void EventDelegateWithBool(GemManager sender, bool value);
+        public event EventDelegateWithBool OnReadyStateChanged;
+
+        private bool isReady = false;
+        public bool IsReady
+        {
+            get { return isReady; }
+            private set
+            {
+                isReady = value;
+                if (null != OnReadyStateChanged)
+                {
+                    OnReadyStateChanged(this, value);
+                }
+            }
+        }
+
+        private int rowCount;
+        private int columnCount;
+        private TileType[][] tiles;
         private GemStackManager gemStackManager;
         private GemController[][] gems;
         private List<PossibleMatch> possibleMatches = new List<PossibleMatch>();
         private List<PossibleMatch> matchedMatches = new List<PossibleMatch>();
 
-        public GemManager(int rowCount, int columnCount)
+        public GemManager(int rowCount, int columnCount, TileType[][] tiles = null)
         {
             Logger.Instance.Message("GemManager was created");
             this.rowCount = rowCount;
             this.columnCount = columnCount;
+            if (tiles == null)
+            {
+                this.tiles = new TileType[columnCount][];
+                for (int i = 0; i < this.tiles.Length; i++)
+                {
+                    this.tiles[i] = new TileType[rowCount];
+                    for (int j = 0; j < this.tiles[i].Length; j++)
+                    {
+                        this.tiles[i][j] = TileType.Regular;
+                    }
+                }
+            }
+            else
+            {
+                this.tiles = tiles;
+            }
             gemStackManager = new GemStackManager();
         }
 
@@ -42,6 +67,7 @@ namespace Match3Core
                 {
                     if (tiles[x][y] != TileType.None)
                     {
+                        gemNotReadyCount++;
                         gems[x][y] = CreateGem(x, y);
                     }
                 }
@@ -80,6 +106,7 @@ namespace Match3Core
                         if (null != gems[x][y])
                         {
                             gems[x][y].OnReadyEvent -= OnGemReady;
+                            gems[x][y].OnNotReadyEvent -= OnGemNotReady;
                             gems[x][y].OnPossibleMatchAddedEvent -= OnPossibleMatchAdded;
                             gems[x][y].OnMovingToEvent -= OnGemMove;
                             gems[x][y].OnDissapear -= OnGemDissapear;
@@ -211,6 +238,10 @@ namespace Match3Core
                 int posYdiff = rowCount - posFromY;
                 while (posFromY < rowCount)
                 {
+                    if (tiles[x][posFromY] == TileType.None)
+                    {
+                        continue;
+                    }
                     GemController gem = CreateGem(x, posFromY, false);
                     gems[x][posFromY] = gem;
                     gem.SetPosition(x, posFromY + posYdiff, false);
@@ -299,9 +330,29 @@ namespace Match3Core
             }
         }
 
+        private int gemNotReadyCount = 0;
         private void OnGemReady(GemController sender)
         {
-            //SetGemNeighbor(sender);
+            gemNotReadyCount--;
+            if (gemNotReadyCount == 0)
+            {
+                IsReady = true;
+                Logger.Instance.Warning("Game is ready");
+            }
+            else if (gemNotReadyCount < 0)
+            {
+                Logger.Instance.Error("gem ready counter is less than 0");
+            }
+        }
+
+        private void OnGemNotReady(GemController sender)
+        {
+            if (gemNotReadyCount == 0)
+            {
+                IsReady = false;
+                Logger.Instance.Warning("Game is not ready");
+            }
+            gemNotReadyCount++;
         }
 
         private void OnPossibleMatchAdded(GemController sender, PossibleMatch possibleMatch)
@@ -336,6 +387,10 @@ namespace Match3Core
 
         private void SetGemNeighbor(GemController gem)
         {
+            if (gem == null)
+            {
+                return;
+            }
             int x = gem.Position.x;
             int y = gem.Position.y;
 
@@ -399,6 +454,7 @@ namespace Match3Core
             {
                 gem = new GemController();
                 gem.OnReadyEvent += OnGemReady;
+                gem.OnNotReadyEvent += OnGemNotReady;
                 gem.OnPossibleMatchAddedEvent += OnPossibleMatchAdded;
                 gem.OnMovingToEvent += OnGemMove;
                 gem.OnDissapear += OnGemDissapear;
@@ -406,7 +462,7 @@ namespace Match3Core
                 gem.OnPossibleMoveFound += OnPossibleMoveFound;
                 if (null != OnGemCreated)
                 {
-                    OnGemCreated(gem);
+                    OnGemCreated(this, gem);
                 }
             }
             gem.SetPosition(x, y);
@@ -420,7 +476,7 @@ namespace Match3Core
             }
 
             GemController ym1Neighbor = y - 1 >= 0 ? gems[x][y - 1] : null;
-            GemController ym2Neighbor = y - 2 >= 0 ? gems[x][y - 1] : null;
+            GemController ym2Neighbor = y - 2 >= 0 ? gems[x][y - 2] : null;
             if ((ym1Neighbor != null && ym2Neighbor != null) && (ym1Neighbor.CurrentGemType.HasSameFlags(ym2Neighbor.CurrentGemType)))
             {
                 unacceptableType.AddFlag(ym1Neighbor.CurrentGemType.GetSameFlags(ym2Neighbor.CurrentGemType), out unacceptableType);
@@ -635,8 +691,16 @@ namespace Match3Core
 
         private void MatchGem(GemController gem)
         {
+            if (gem == null || gem.CurrentState == GemController.State.Matched)
+            {
+                return;
+            }
             RemoveGemNeighbor(gem);
             gem.OnMatch();
+            if (null != OnGemMatch)
+            {
+                OnGemMatch(this, gem);
+            }
         }
 
         public void ShuffleGems()
@@ -646,14 +710,50 @@ namespace Match3Core
                 int i0 = i / rowCount;
                 int i1 = i % rowCount;
 
+                if (tiles[i0][i1] == TileType.None)
+                {
+                    continue;
+                }
+
+                GemType unacceptableType = GemType.None;
+                GemController xm1Neighbor = i0 + 1 < columnCount ? gems[i0 + 1][i1] : null;
+                GemController xm2Neighbor = i0 + 2 < columnCount ? gems[i0 + 2][i1] : null;
+                if ((xm1Neighbor != null && xm2Neighbor != null) && (xm1Neighbor.CurrentGemType.HasSameFlags(xm2Neighbor.CurrentGemType)))
+                {
+                    unacceptableType.AddFlag(xm1Neighbor.CurrentGemType.GetSameFlags(xm2Neighbor.CurrentGemType), out unacceptableType);
+                }
+
+                GemController ym1Neighbor = i1 + 1 < rowCount ? gems[i0][i1 + 1] : null;
+                GemController ym2Neighbor = i1 + 2 < rowCount ? gems[i0][i1 + 2] : null;
+                if ((ym1Neighbor != null && ym2Neighbor != null) && (ym1Neighbor.CurrentGemType.HasSameFlags(ym2Neighbor.CurrentGemType)))
+                {
+                    unacceptableType.AddFlag(ym1Neighbor.CurrentGemType.GetSameFlags(ym2Neighbor.CurrentGemType), out unacceptableType);
+                }
+
                 int j = Randomizer.Range(0, i + 1);
                 int j0 = j / rowCount;
                 int j1 = j % rowCount;
 
+                while (gems[j0][j1] != null && unacceptableType.HasSameFlags(gems[j0][j1].CurrentGemType) || tiles[j0][j1] == TileType.None)
+                {
+                    j = Randomizer.Range(0, i + 1);
+                    j0 = j / rowCount;
+                    j1 = j % rowCount;
+
+                    if ((i == 0 || i == 1) && gems[j0][j1] != null && unacceptableType.HasSameFlags(gems[j0][j1].CurrentGemType))
+                    {
+                        i = rowCount;
+                        continue;
+                    }
+                }
+
                 GemController temp = gems[i0][i1];
                 gems[i0][i1] = gems[j0][j1];
                 gems[j0][j1] = temp;
-                gems[i0][i1].SetPosition(i0, i1, true);
+                if (gems[i0][i1] != null)
+                {
+                    gems[i0][i1].SetPosition(i0, i1, true);
+                }
             }
 
             for (int x = 0; x < columnCount; x++)

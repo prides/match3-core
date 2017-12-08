@@ -154,11 +154,12 @@ namespace Match3CoreDemo
         private void OnPositionChanged(GemController sender, int x, int y, bool interpolate)
         {
             Canvas.SetLeft(image, 50 + x * 32);
-            Canvas.SetTop(image, 50 + (32 * 6 - y * 32));
+            Canvas.SetBottom(image, 50 + y * 32);
             Canvas.SetLeft(specialImage, 50 + x * 32);
-            Canvas.SetTop(specialImage, 50 + (32 * 6 - y * 32));
+            Canvas.SetBottom(specialImage, 50 + y * 32);
             if (interpolate)
             {
+                OnMovingStart();
                 Task.Delay(500).ContinueWith(__ =>
                 {
                     instance.OnMovingEnd();

@@ -41,7 +41,7 @@ namespace Match3CoreDemo
             winShape.IsHitTestVisible = false;
 
             Canvas.SetLeft(winShape, 50 + instance.Key.Position.x * 32 + 8);
-            Canvas.SetTop(winShape, 50 + (32 * 6 - instance.Key.Position.y * 32) + 8);
+            Canvas.SetBottom(winShape, 50 + instance.Key.Position.y * 32 + 8);
         }
 
         private PointCollection GetShapePoints()
