@@ -123,6 +123,34 @@ namespace Match3Core
                     | (DownNeighbor == null ? Direction.Down : Direction.None);
             }
         }
+
+        private bool isReady = false;
+        public bool IsReady
+        {
+            get { return isReady; }
+            private set
+            {
+                if (isReady == value)
+                {
+                    return;
+                }
+                isReady = value;
+                if (isReady)
+                {
+                    if (null != OnReadyEvent)
+                    {
+                        OnReadyEvent(this);
+                    }
+                }
+                else
+                {
+                    if (null != OnNotReadyEvent)
+                    {
+                        OnNotReadyEvent(this);
+                    }
+                }
+            }
+        }
         #endregion
 
         #region neighbor
@@ -426,10 +454,7 @@ namespace Match3Core
             Logger.Instance.Message(this.ToString() + " moving start");
             Clear();
             CurrentState = State.Moving;
-            if (null != OnNotReadyEvent)
-            {
-                OnNotReadyEvent(this);
-            }
+            IsReady = false;
         }
 
         public void OnMovingEnd()
@@ -439,10 +464,7 @@ namespace Match3Core
             CurrentState = State.Idle;
             needToCheckNeighbor = true;
             needToCheckNeighborPossibleMove = Direction.Left | Direction.Right | Direction.Up | Direction.Down;
-            if (null != OnReadyEvent)
-            {
-                OnReadyEvent(this);
-            }
+            IsReady = true;
         }
 
         internal void OnMatch()
@@ -460,10 +482,7 @@ namespace Match3Core
             {
                 OnFadeout(this);
             }
-            if (null != OnNotReadyEvent)
-            {
-                OnNotReadyEvent(this);
-            }
+            IsReady = false;
             if (SpecialType != GemSpecialType.Regular)
             {
                 if (null != OnSpecialMatch)
@@ -477,10 +496,7 @@ namespace Match3Core
         {
             Logger.Instance.Message(this.ToString() + " OnAppearOver");
             //IsActive = true;
-            if (null != OnReadyEvent)
-            {
-                OnReadyEvent(this);
-            }
+            IsReady = true;
         }
 
         public void OnFadeoutOver()
